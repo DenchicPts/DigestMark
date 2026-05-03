@@ -1,0 +1,6 @@
+!.env.example
+.env
+n8n/local-files
+n8n/.n8n
+audio-transcribe/whisper-models
+llama.cpp/models

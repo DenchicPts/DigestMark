@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Whisper — транскрибация</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:      #0e0f11;
+    --surface: #161719;
+    --border:  #2a2b2e;
+    --accent:  #4ade80;
+    --accent2: #22d3ee;
+    --text:    #e2e4e9;
+    --muted:   #6b7280;
+    --error:   #f87171;
+    --mono:    'IBM Plex Mono', monospace;
+    --sans:    'IBM Plex Sans', sans-serif;
+  }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--sans); min-height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; padding: 48px 16px;
+  }
+  header {
+    width: 100%; max-width: 720px;
+    margin-bottom: 40px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 20px;
+  }
+  .logo { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 8px; }
+  h1 { font-size: 28px; font-weight: 300; letter-spacing: -0.02em; }
+  h1 span { color: var(--accent); font-weight: 500; }
+  .subtitle { margin-top: 6px; font-size: 13px; color: var(--muted); font-family: var(--mono); }
+
+  .card { width: 100%; max-width: 720px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 28px; }
+
+  .dropzone {
+    border: 1.5px dashed var(--border); border-radius: 6px;
+    padding: 36px 20px; text-align: center; cursor: pointer;
+    transition: border-color 0.2s, background 0.2s; position: relative;
+  }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: rgba(74,222,128,0.04); }
+  .dropzone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-icon { font-size: 28px; margin-bottom: 10px; }
+  .drop-label { font-size: 14px; color: var(--muted); }
+  .drop-label strong { color: var(--text); }
+  .drop-formats { margin-top: 6px; font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.04em; }
+
+  .file-preview { margin-top: 10px; font-family: var(--mono); font-size: 12px; color: var(--accent); display: none; align-items: center; gap: 6px; }
+
+  .options { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+  .field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 140px; }
+  label { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+  select { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-family: var(--mono); font-size: 13px; padding: 7px 10px; outline: none; transition: border-color 0.2s; cursor: pointer; }
+  select:focus { border-color: var(--accent); }
+
+  button#submitBtn {
+    margin-top: 20px; width: 100%; padding: 12px;
+    background: transparent; border: 1.5px solid var(--accent);
+    color: var(--accent); font-family: var(--mono);
+    font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+    border-radius: 4px; cursor: pointer; transition: background 0.2s, color 0.2s;
+  }
+  button#submitBtn:hover:not(:disabled) { background: var(--accent); color: #0e0f11; }
+  button#submitBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .status { margin-top: 14px; font-family: var(--mono); font-size: 12px; color: var(--muted); min-height: 18px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: blink 1s infinite; display: none; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+  .status.loading .dot { display: block; }
+
+  .error-box { margin-top: 14px; padding: 12px 16px; background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.25); border-radius: 6px; font-family: var(--mono); font-size: 12px; color: var(--error); display: none; }
+
+  /* Result */
+  #result { margin-top: 24px; display: none; }
+  .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .result-label { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+  .badges { display: flex; gap: 6px; align-items: center; }
+  .badge { font-family: var(--mono); font-size: 10px; padding: 2px 8px; border-radius: 99px; letter-spacing: 0.05em; }
+  .lang-badge { background: rgba(34,211,238,0.1); border: 1px solid rgba(34,211,238,0.25); color: var(--accent2); }
+  .time-badge { background: rgba(74,222,128,0.08); border: 1px solid rgba(74,222,128,0.2); color: var(--accent); }
+
+  /* Streaming text area */
+  .result-text {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 16px;
+    font-size: 14px; line-height: 1.8;
+    min-height: 80px; max-height: 500px; overflow-y: auto;
+    word-break: break-word;
+  }
+  .seg-inline { display: inline; }
+  .seg-inline.new { color: var(--accent); transition: color 1.5s; }
+
+  /* Cursor blink while streaming */
+  .cursor { display: inline-block; width: 2px; height: 1em; background: var(--accent); margin-left: 2px; animation: blink 0.8s infinite; vertical-align: text-bottom; }
+
+  /* Segments accordion */
+  details { margin-top: 12px; }
+  summary { font-family: var(--mono); font-size: 11px; color: var(--muted); cursor: pointer; user-select: none; letter-spacing: 0.05em; }
+  summary:hover { color: var(--text); }
+  .segments { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+  .seg { display: flex; gap: 12px; font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .seg:last-child { border-bottom: none; }
+  .seg-time { font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; padding-top: 1px; min-width: 90px; }
+
+  #copyBtn { background: none; border: 1px solid var(--border); color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; padding: 4px 10px; border-radius: 4px; cursor: pointer; transition: all 0.15s; text-transform: uppercase; }
+  #copyBtn:hover { color: var(--text); border-color: var(--text); }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">faster-whisper // local asr</div>
+  <h1>Транскри<span>бация</span></h1>
+  <div class="subtitle">загрузи файл — текст появляется по мере обработки</div>
+</header>
+
+<div class="card">
+  <div class="dropzone" id="dropzone">
+    <input type="file" id="fileInput" accept="audio/*,video/*,.ogg,.opus,.flac,.weba,.webm,.amr,.3gp">
+    <div class="drop-icon">🎙</div>
+    <div class="drop-label"><strong>Выбери файл</strong> или перетащи сюда</div>
+    <div class="drop-formats">mp3 · mp4 · ogg · wav · flac · m4a · webm · opus · mov · avi · mkv · amr · 3gp</div>
+  </div>
+  <div class="file-preview" id="filePreview"><span>📎</span><span id="fileName"></span></div>
+
+  <div class="options">
+    <div class="field">
+      <label>Язык</label>
+      <select id="langSelect">
+        <option value="">Авто-определение</option>
+        <option value="ru">Русский</option>
+        <option value="lv">Латышский</option>
+        <option value="en">English</option>
+        <option value="de">Deutsch</option>
+        <option value="uk">Украинский</option>
+        <option value="pl">Polski</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Режим</label>
+      <select id="taskSelect">
+        <option value="transcribe">Транскрибация</option>
+        <option value="translate">Перевод в EN</option>
+      </select>
+    </div>
+  </div>
+
+  <button id="submitBtn" disabled>Транскрибировать</button>
+  <div class="status" id="status"></div>
+  <div class="error-box" id="errorBox"></div>
+
+  <div id="result">
+    <div class="result-header">
+      <span class="result-label">Результат</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div class="badges">
+          <span class="badge lang-badge" id="langBadge"></span>
+          <span class="badge time-badge" id="timeBadge"></span>
+        </div>
+        <button id="copyBtn">Копировать</button>
+      </div>
+    </div>
+    <div class="result-text" id="resultText"></div>
+    <details id="segDetails">
+      <summary>▸ Сегменты с таймкодами</summary>
+      <div class="segments" id="segments"></div>
+    </details>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fileInput = $('fileInput'), dropzone = $('dropzone'),
+      submitBtn = $('submitBtn'), statusEl = $('status'),
+      resultDiv = $('result'), resultText = $('resultText'),
+      segmentsDiv = $('segments'), errorBox = $('errorBox'),
+      langBadge = $('langBadge'), timeBadge = $('timeBadge'),
+      filePreview = $('filePreview'), fileNameEl = $('fileName');
+
+let selectedFile = null, timerInterval = null, startTime = null;
+let cursor = null;
+
+// --- drag & drop ---
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('dragover'); const f = e.dataTransfer.files[0]; if (f) setFile(f); });
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+
+function setFile(f) {
+  selectedFile = f;
+  filePreview.style.display = 'flex';
+  fileNameEl.textContent = f.name + ' (' + (f.size / 1024 / 1024).toFixed(2) + ' MB)';
+  submitBtn.disabled = false;
+  resultDiv.style.display = 'none';
+  errorBox.style.display = 'none';
+  setStatus('');
+}
+
+function setStatus(msg, loading = false) {
+  statusEl.className = 'status' + (loading ? ' loading' : '');
+  statusEl.innerHTML = loading ? `<div class="dot"></div>${msg}` : msg;
+}
+
+function startTimer() {
+  startTime = Date.now();
+  timerInterval = setInterval(() => {
+    const s = Math.floor((Date.now() - startTime) / 1000);
+    const m = Math.floor(s / 60).toString().padStart(2, '0');
+    const sec = (s % 60).toString().padStart(2, '0');
+    setStatus(`Обрабатываю... ${m}:${sec}`, true);
+  }, 500);
+}
+
+function stopTimer() {
+  clearInterval(timerInterval);
+  const s = Math.floor((Date.now() - startTime) / 1000);
+  const m = Math.floor(s / 60).toString().padStart(2, '0');
+  const sec = (s % 60).toString().padStart(2, '0');
+  return `${m}:${sec}`;
+}
+
+function addCursor() {
+  cursor = document.createElement('span');
+  cursor.className = 'cursor';
+  resultText.appendChild(cursor);
+}
+function removeCursor() {
+  if (cursor && cursor.parentNode) cursor.parentNode.removeChild(cursor);
+  cursor = null;
+}
+
+function addSegment(seg) {
+  // Добавить в inline текст
+  removeCursor();
+  const span = document.createElement('span');
+  span.className = 'seg-inline new';
+  span.textContent = (resultText.textContent ? ' ' : '') + seg.text;
+  resultText.appendChild(span);
+  // Убрать highlight через 1.5s
+  setTimeout(() => span.classList.remove('new'), 1500);
+  addCursor();
+  // Скролл вниз
+  resultText.scrollTop = resultText.scrollHeight;
+
+  // В аккордеон
+  const el = document.createElement('div');
+  el.className = 'seg';
+  el.innerHTML = `<span class="seg-time">${fmt(seg.start)} → ${fmt(seg.end)}</span><span>${seg.text}</span>`;
+  segmentsDiv.appendChild(el);
+}
+
+submitBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+
+  submitBtn.disabled = true;
+  resultDiv.style.display = 'none';
+  errorBox.style.display = 'none';
+  resultText.innerHTML = '';
+  segmentsDiv.innerHTML = '';
+  langBadge.textContent = '';
+  timeBadge.textContent = '';
+
+  startTimer();
+
+  const lang = $('langSelect').value;
+  const task = $('taskSelect').value;
+  const form = new FormData();
+  form.append('file', selectedFile);
+  let url = `/transcribe/stream?task=${task}`;
+  if (lang) url += `&language=${lang}`;
+
+  try {
+    const res = await fetch(url, { method: 'POST', body: form });
+
+    if (!res.ok) {
+      // Сервер вернул не-200 — попробуем прочитать как JSON ошибку
+      const errData = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+      throw new Error(errData.detail || `HTTP ${res.status}`);
+    }
+
+    // Показываем блок результата сразу
+    resultDiv.style.display = 'block';
+    addCursor();
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // неполная строка — обратно в буфер
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (!raw) continue;
+
+        let evt;
+        try { evt = JSON.parse(raw); } catch { continue; }
+
+        if (evt.type === 'info') {
+          langBadge.textContent = evt.language || '?';
+        } else if (evt.type === 'segment') {
+          addSegment(evt);
+        } else if (evt.type === 'done') {
+          removeCursor();
+          const elapsed = stopTimer();
+          setStatus('Готово ✓');
+          timeBadge.textContent = `⏱ ${elapsed}`;
+        }
+      }
+    }
+
+  } catch (err) {
+    removeCursor();
+    stopTimer();
+    setStatus('');
+    errorBox.style.display = 'block';
+    errorBox.textContent = '⚠ ' + err.message;
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+$('copyBtn').addEventListener('click', () => {
+  navigator.clipboard.writeText(resultText.innerText);
+  const btn = $('copyBtn');
+  btn.textContent = 'Скопировано!';
+  setTimeout(() => btn.textContent = 'Копировать', 1500);
+});
+
+function fmt(sec) {
+  const m = Math.floor(sec / 60).toString().padStart(2, '0');
+  const s = Math.floor(sec % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+</script>
+</body>
+</html>

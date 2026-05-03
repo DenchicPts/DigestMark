@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ytdl — скачать видео</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:      #0e0f11;
+    --surface: #161719;
+    --border:  #2a2b2e;
+    --accent:  #4ade80;
+    --accent2: #22d3ee;
+    --accent3: #f59e0b;
+    --text:    #e2e4e9;
+    --muted:   #6b7280;
+    --error:   #f87171;
+    --mono:    'IBM Plex Mono', monospace;
+    --sans:    'IBM Plex Sans', sans-serif;
+  }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--sans); min-height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; padding: 48px 16px;
+  }
+  header {
+    width: 100%; max-width: 720px;
+    margin-bottom: 40px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 20px;
+  }
+  .logo { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 8px; }
+  h1 { font-size: 28px; font-weight: 300; letter-spacing: -0.02em; }
+  h1 span { color: var(--accent); font-weight: 500; }
+  .subtitle { margin-top: 6px; font-size: 13px; color: var(--muted); font-family: var(--mono); }
+
+  .card { width: 100%; max-width: 720px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 28px; }
+
+  .url-wrap { position: relative; }
+  .url-input {
+    width: 100%;
+    background: var(--bg); border: 1.5px solid var(--border);
+    border-radius: 6px; color: var(--text);
+    font-family: var(--mono); font-size: 13px;
+    padding: 12px 14px;
+    outline: none; transition: border-color 0.2s;
+  }
+  .url-input::placeholder { color: var(--muted); }
+  .url-input:focus { border-color: var(--accent); }
+  .url-input.has-value { border-color: rgba(74,222,128,0.4); }
+
+  .platform-hint {
+    margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .ph { font-family: var(--mono); font-size: 10px; padding: 2px 8px;
+        border-radius: 99px; letter-spacing: 0.05em; cursor: default; }
+  .ph-yt  { background: rgba(239,68,68,0.1);  border: 1px solid rgba(239,68,68,0.25);  color: #f87171; }
+  .ph-tt  { background: rgba(34,211,238,0.1); border: 1px solid rgba(34,211,238,0.25); color: var(--accent2); }
+  .ph-etc { background: rgba(74,222,128,0.08); border: 1px solid rgba(74,222,128,0.2); color: var(--accent); }
+
+  /* ── Codec selector ── */
+  .codec-section { margin-top: 20px; }
+  .codec-section-label {
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+    letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px;
+    display: block;
+  }
+  .codec-groups { display: flex; flex-direction: column; gap: 10px; }
+  .codec-group { display: flex; align-items: flex-start; gap: 10px; }
+  .codec-group-label {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--muted); min-width: 56px;
+    padding-top: 8px; letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
+  .codec-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .fmt-btn {
+    font-family: var(--mono); font-size: 11px;
+    padding: 5px 12px; border-radius: 4px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg);
+    color: var(--muted); transition: all 0.15s; white-space: nowrap;
+  }
+  .fmt-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .fmt-btn.active {
+    border-color: var(--accent); background: rgba(74,222,128,0.1);
+    color: var(--accent);
+  }
+  .fmt-btn.active-vp9 {
+    border-color: var(--accent2); background: rgba(34,211,238,0.1);
+    color: var(--accent2);
+  }
+  .fmt-btn.active-av1 {
+    border-color: var(--accent3); background: rgba(245,158,11,0.1);
+    color: var(--accent3);
+  }
+  .fmt-btn.active-audio {
+    border-color: #c084fc; background: rgba(192,132,252,0.1);
+    color: #c084fc;
+  }
+
+  /* Codec hint box */
+  .codec-hint {
+    margin-top: 12px; padding: 10px 14px;
+    border-radius: 4px; font-family: var(--mono); font-size: 11px;
+    display: flex; align-items: flex-start; gap: 8px;
+    transition: all 0.2s;
+  }
+  .codec-hint .hint-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+  .codec-hint .hint-text { line-height: 1.6; }
+  .hint-h264  { background: rgba(74,222,128,0.06);  border: 1px solid rgba(74,222,128,0.15);  color: #86efac; }
+  .hint-vp9   { background: rgba(34,211,238,0.06);  border: 1px solid rgba(34,211,238,0.15);  color: #67e8f9; }
+  .hint-av1   { background: rgba(245,158,11,0.06);  border: 1px solid rgba(245,158,11,0.15);  color: #fcd34d; }
+  .hint-audio { background: rgba(192,132,252,0.06); border: 1px solid rgba(192,132,252,0.15); color: #d8b4fe; }
+
+  button#submitBtn {
+    margin-top: 20px; width: 100%; padding: 12px;
+    background: transparent; border: 1.5px solid var(--accent);
+    color: var(--accent); font-family: var(--mono);
+    font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+    border-radius: 4px; cursor: pointer; transition: background 0.2s, color 0.2s;
+  }
+  button#submitBtn:hover:not(:disabled) { background: var(--accent); color: #0e0f11; }
+  button#submitBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .status { margin-top: 14px; font-family: var(--mono); font-size: 12px; color: var(--muted); min-height: 18px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: blink 1s infinite; display: none; flex-shrink: 0; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+  .status.loading .dot { display: block; }
+
+  .progress-wrap { margin-top: 14px; display: none; flex-direction: column; gap: 6px; }
+  .progress-bar { width: 100%; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s ease; width: 0%; }
+  .progress-meta { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+  .error-box {
+    margin-top: 14px; padding: 12px 16px;
+    background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.25);
+    border-radius: 6px; font-family: var(--mono); font-size: 12px;
+    color: var(--error); display: none; word-break: break-word;
+  }
+
+  #result { margin-top: 24px; display: none; }
+  .result-card { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 20px; }
+  .result-title { font-size: 15px; font-weight: 500; margin-bottom: 14px; word-break: break-word; line-height: 1.4; }
+  .result-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+  .badge { font-family: var(--mono); font-size: 10px; padding: 2px 8px; border-radius: 99px; letter-spacing: 0.05em; }
+  .badge-size   { background: rgba(74,222,128,0.08);  border: 1px solid rgba(74,222,128,0.2);  color: var(--accent); }
+  .badge-time   { background: rgba(34,211,238,0.08);  border: 1px solid rgba(34,211,238,0.2);  color: var(--accent2); }
+  .badge-expiry { background: rgba(245,158,11,0.08);  border: 1px solid rgba(245,158,11,0.2);  color: var(--accent3); }
+  .badge-codec  { background: rgba(192,132,252,0.08); border: 1px solid rgba(192,132,252,0.2); color: #c084fc; }
+
+  .download-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; padding: 12px;
+    background: var(--accent); border: none;
+    color: #0e0f11; font-family: var(--mono);
+    font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+    border-radius: 4px; cursor: pointer; transition: opacity 0.2s;
+    text-decoration: none;
+  }
+  .download-btn:hover { opacity: 0.88; }
+
+  .expiry-row { margin-top: 12px; display: flex; justify-content: center; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+  #expiryTimer { color: var(--accent3); margin-left: 4px; }
+
+  .info-preview {
+    margin-top: 12px; padding: 10px 14px;
+    background: rgba(74,222,128,0.04); border: 1px solid rgba(74,222,128,0.12);
+    border-radius: 4px; font-family: var(--mono); font-size: 11px; color: var(--muted);
+    display: none;
+  }
+  .info-preview strong { color: var(--text); display: block; margin-bottom: 2px; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">yt-dlp // video downloader</div>
+  <h1>Скачать <span>видео</span></h1>
+  <div class="subtitle">youtube · tiktok · и ещё 1000+ сайтов</div>
+</header>
+
+<div class="card">
+  <div class="url-wrap">
+    <input type="url" id="urlInput" class="url-input"
+      placeholder="https://youtube.com/watch?v=...  или  https://tiktok.com/..."
+      autocomplete="off" spellcheck="false">
+  </div>
+  <div class="platform-hint">
+    <span class="ph ph-yt">YouTube</span>
+    <span class="ph ph-tt">TikTok</span>
+    <span class="ph ph-etc">Instagram · Twitter · Vimeo · и др.</span>
+  </div>
+
+  <!-- ── Codec / Quality selector ── -->
+  <div class="codec-section">
+    <span class="codec-section-label">Качество и кодек</span>
+    <div class="codec-groups">
+
+      <div class="codec-group">
+        <span class="codec-group-label">H.264</span>
+        <div class="codec-btns">
+          <button class="fmt-btn active" data-fmt="h264_1080p" data-codec="h264">1080p ★</button>
+          <button class="fmt-btn" data-fmt="h264_720p"  data-codec="h264">720p</button>
+          <button class="fmt-btn" data-fmt="h264_480p"  data-codec="h264">480p</button>
+          <button class="fmt-btn" data-fmt="h264_360p"  data-codec="h264">360p</button>
+        </div>
+      </div>
+
+      <div class="codec-group">
+        <span class="codec-group-label">VP9</span>
+        <div class="codec-btns">
+          <button class="fmt-btn" data-fmt="vp9_4k"    data-codec="vp9">4K</button>
+          <button class="fmt-btn" data-fmt="vp9_1440p" data-codec="vp9">1440p</button>
+          <button class="fmt-btn" data-fmt="vp9_1080p" data-codec="vp9">1080p</button>
+          <button class="fmt-btn" data-fmt="vp9_720p"  data-codec="vp9">720p</button>
+        </div>
+      </div>
+
+      <div class="codec-group">
+        <span class="codec-group-label">AV1</span>
+        <div class="codec-btns">
+          <button class="fmt-btn" data-fmt="av1" data-codec="av1">Лучшее (до 8K)</button>
+        </div>
+      </div>
+
+      <div class="codec-group">
+        <span class="codec-group-label">Аудио</span>
+        <div class="codec-btns">
+          <button class="fmt-btn" data-fmt="audio" data-codec="audio">MP3 192k</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Подсказка под выбором -->
+    <div class="codec-hint hint-h264" id="codecHint">
+      <span class="hint-icon">✅</span>
+      <span class="hint-text" id="codecHintText">
+        <b>H.264 — рекомендуется для Windows.</b> Воспроизводится в стандартном проигрывателе Windows без каких-либо кодеков. YouTube отдаёт H.264 максимум до 1080p.
+      </span>
+    </div>
+  </div>
+
+  <button id="submitBtn" disabled>Скачать</button>
+
+  <div class="info-preview" id="infoPreview">
+    <strong id="infoTitle"></strong>
+    <span id="infoMeta"></span>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-meta">
+      <span id="progressLeft">0 MB / 0 MB</span>
+      <span id="progressRight">— MB/s · ETA —</span>
+    </div>
+  </div>
+
+  <div class="status" id="status"></div>
+  <div class="error-box" id="errorBox"></div>
+
+  <div id="result">
+    <div class="result-card">
+      <div class="result-title" id="resultTitle"></div>
+      <div class="result-meta" id="resultMeta"></div>
+      <a id="downloadBtn" class="download-btn" href="#" download>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M7 1v8M7 9l-3-3M7 9l3-3M1 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Скачать файл
+      </a>
+      <div class="expiry-row">файл будет удалён через <span id="expiryTimer">—</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const urlInput    = $('urlInput');
+const submitBtn   = $('submitBtn');
+const statusEl    = $('status');
+const errorBox    = $('errorBox');
+const progressWrap  = $('progressWrap');
+const progressFill  = $('progressFill');
+const progressLeft  = $('progressLeft');
+const progressRight = $('progressRight');
+const infoPreview   = $('infoPreview');
+const infoTitle     = $('infoTitle');
+const infoMeta      = $('infoMeta');
+const resultDiv     = $('result');
+const resultTitle   = $('resultTitle');
+const resultMeta    = $('resultMeta');
+const downloadBtn   = $('downloadBtn');
+const expiryTimer   = $('expiryTimer');
+const codecHint     = $('codecHint');
+const codecHintText = $('codecHintText');
+
+let selectedFmt  = 'h264_1080p';
+let expiryInterval = null;
+let startTime      = null;
+
+// ── Codec hints ──
+const HINTS = {
+  h264: {
+    cls:  'hint-h264',
+    icon: '✅',
+    text: '<b>H.264 — рекомендуется для Windows.</b> Воспроизводится в стандартном проигрывателе Windows без каких-либо кодеков. YouTube отдаёт H.264 максимум до 1080p.',
+  },
+  vp9: {
+    cls:  'hint-vp9',
+    icon: '🎬',
+    text: '<b>VP9 — до 4K.</b> Бесплатно воспроизводится в VLC и браузере. Стандартный проигрыватель Windows может попросить кодек VP9 из Microsoft Store (бесплатно).',
+  },
+  av1: {
+    cls:  'hint-av1',
+    icon: '⚡',
+    text: '<b>AV1 — максимальное качество, лучшее сжатие.</b> Требует VLC или Windows 11 + бесплатное расширение «AV1 Video Extension» из Microsoft Store. Стандартный плеер Win 10 не воспроизведёт.',
+  },
+  audio: {
+    cls:  'hint-audio',
+    icon: '🎵',
+    text: '<b>Только аудио MP3 192 kbps.</b> Воспроизводится везде без каких-либо кодеков.',
+  },
+};
+
+// ── Format buttons ──
+document.querySelectorAll('.fmt-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    // deactivate all
+    document.querySelectorAll('.fmt-btn').forEach(b => {
+      b.classList.remove('active', 'active-vp9', 'active-av1', 'active-audio');
+    });
+    // activate clicked
+    const codec = btn.dataset.codec;
+    const cls = codec === 'h264' ? 'active'
+              : codec === 'vp9'  ? 'active-vp9'
+              : codec === 'av1'  ? 'active-av1'
+              : 'active-audio';
+    btn.classList.add(cls);
+    selectedFmt = btn.dataset.fmt;
+
+    // update hint
+    const h = HINTS[codec];
+    codecHint.className = `codec-hint ${h.cls}`;
+    codecHint.querySelector('.hint-icon').textContent = h.icon;
+    codecHintText.innerHTML = h.text;
+  });
+});
+
+// ── URL validation ──
+urlInput.addEventListener('input', () => {
+  const v = urlInput.value.trim();
+  urlInput.classList.toggle('has-value', v.length > 0);
+  submitBtn.disabled = !isValidUrl(v);
+});
+
+function isValidUrl(s) {
+  try { new URL(s); return true; } catch { return false; }
+}
+
+// ── Status ──
+function setStatus(msg, loading = false) {
+  statusEl.className = 'status' + (loading ? ' loading' : '');
+  statusEl.innerHTML = loading ? `<div class="dot"></div>${msg}` : msg;
+}
+
+// ── Expiry countdown ──
+function startExpiry(seconds) {
+  clearInterval(expiryInterval);
+  let rem = seconds;
+  function fmt(s) {
+    const m = Math.floor(s/60), sec = s%60;
+    return m > 0 ? `${m}м ${sec}с` : `${sec}с`;
+  }
+  expiryTimer.textContent = fmt(rem);
+  expiryInterval = setInterval(() => {
+    rem--;
+    if (rem <= 0) {
+      clearInterval(expiryInterval);
+      expiryTimer.textContent = 'истёк';
+      downloadBtn.style.opacity = '0.4';
+      downloadBtn.style.pointerEvents = 'none';
+      return;
+    }
+    expiryTimer.textContent = fmt(rem);
+  }, 1000);
+}
+
+// ── Reset UI ──
+function resetUI() {
+  resultDiv.style.display    = 'none';
+  errorBox.style.display     = 'none';
+  infoPreview.style.display  = 'none';
+  progressWrap.style.display = 'none';
+  progressFill.style.width   = '0%';
+  clearInterval(expiryInterval);
+  setStatus('');
+}
+
+// ── Submit ──
+submitBtn.addEventListener('click', async () => {
+  const url = urlInput.value.trim();
+  if (!url) return;
+
+  submitBtn.disabled = true;
+  resetUI();
+  startTime = Date.now();
+  setStatus('Подключаюсь…', true);
+
+  const endpoint = `/download/stream?url=${encodeURIComponent(url)}&fmt=${selectedFmt}`;
+
+  try {
+    const res = await fetch(endpoint, { method: 'POST' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ message: `HTTP ${res.status}` }));
+      throw new Error(err.detail || err.message || `HTTP ${res.status}`);
+    }
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (!raw) continue;
+        let evt;
+        try { evt = JSON.parse(raw); } catch { continue; }
+        handleEvent(evt);
+      }
+    }
+  } catch (err) {
+    setStatus('');
+    showError(err.message);
+  } finally {
+    submitBtn.disabled = !isValidUrl(urlInput.value.trim());
+  }
+});
+
+function handleEvent(evt) {
+  switch (evt.type) {
+    case 'info':
+      infoTitle.textContent = evt.title || '';
+      const dur = evt.duration ? fmtDuration(evt.duration) : '';
+      const upl = evt.uploader ? `· ${evt.uploader}` : '';
+      infoMeta.textContent = [evt.platform, dur, upl].filter(Boolean).join(' ');
+      infoPreview.style.display = 'block';
+      setStatus('Скачиваю…', true);
+      progressWrap.style.display = 'flex';
+      break;
+
+    case 'progress':
+      progressFill.style.width = `${evt.percent}%`;
+      progressLeft.textContent = `${evt.downloaded_mb} MB / ${evt.total_mb} MB`;
+      const speed = evt.speed_mb > 0 ? `${evt.speed_mb} MB/s` : '—';
+      const eta   = evt.eta > 0 ? `ETA ${fmtDuration(evt.eta)}` : '';
+      progressRight.textContent = [speed, eta].filter(Boolean).join(' · ');
+      setStatus(`Скачиваю… ${evt.percent}%`, true);
+      break;
+
+    case 'processing':
+      progressFill.style.width = '100%';
+      setStatus(evt.message || 'Обрабатываю…', true);
+      break;
+
+    case 'done': {
+      progressFill.style.width = '100%';
+      progressWrap.style.display = 'none';
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      setStatus('Готово ✓');
+
+      resultTitle.textContent = evt.title || evt.filename;
+      resultMeta.innerHTML = `
+        <span class="badge badge-size">${evt.size_mb} MB</span>
+        <span class="badge badge-time">⏱ ${elapsed}с</span>
+        <span class="badge badge-expiry">TTL ${fmtDuration(evt.expires_in)}</span>
+        <span class="badge badge-codec">${selectedFmt}</span>
+      `;
+      downloadBtn.href     = evt.download_url;
+      downloadBtn.download = evt.filename;
+      resultDiv.style.display = 'block';
+      startExpiry(evt.expires_in);
+      break;
+    }
+
+    case 'error':
+      progressWrap.style.display = 'none';
+      setStatus('');
+      showError(evt.message);
+      break;
+  }
+}
+
+function showError(msg) {
+  errorBox.textContent = '⚠ ' + msg;
+  errorBox.style.display = 'block';
+}
+
+function fmtDuration(sec) {
+  if (!sec) return '';
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return m > 0 ? `${m}м ${s}с` : `${s}с`;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,1288 @@
+{
+  "name": "Telegram AI Pipeline v6",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const msg = $json.message;\nif (!msg) return [];\n\n// Только этот пользователь может использовать бота\nconst ALLOWED_USER_ID = 1111111;\nif (msg.from.id !== ALLOWED_USER_ID) return [];\n\nconst chatId = msg.chat.id;\nconst messageId = msg.message_id;\n\nlet contentType = 'unknown';\nlet content = '';\nlet fileId = null;\n\nif (msg.voice) {\n  contentType = 'media';\n  fileId = msg.voice.file_id;\n} else if (msg.video_note) {\n  contentType = 'media';\n  fileId = msg.video_note.file_id;\n} else if (msg.audio) {\n  contentType = 'media';\n  fileId = msg.audio.file_id;\n} else if (msg.video) {\n  contentType = 'media';\n  fileId = msg.video.file_id;\n} else if (msg.text) {\n  const urlPattern = /https?:\\/\\/(www\\.)?(youtube\\.com|youtu\\.be|tiktok\\.com|vimeo\\.com)\\S*/i;\n  const match = msg.text.match(urlPattern);\n  if (match) {\n    contentType = 'url';\n    content = match[0];\n  } else {\n    contentType = 'text';\n    content = msg.text;\n  }\n} else {\n  return [];\n}\n\nreturn [{ json: { chatId, messageId, contentType, content, fileId } }];"
+      },
+      "id": "14f1f6ec-3447-4684-b940-69ac67adcbda",
+      "name": "Detect Content Type",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5152,
+        3392
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "⏳ Обрабатываю...",
+        "additionalFields": {}
+      },
+      "id": "12bf8cd2-4adb-47ac-95bb-d2f3b675ed15",
+      "name": "Send Status",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        5360,
+        3392
+      ],
+      "webhookId": "3d51cf08-c451-4a38-b9a0-fb06695279ab",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Detect Content Type').first().json;\nconst statusMsgId = $json.result.message_id;\nreturn [{ json: { ...prev, statusMsgId } }];"
+      },
+      "id": "316772ef-7625-4e7d-ad2e-fc254a5f0b69",
+      "name": "Attach Status ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5552,
+        3392
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.contentType }}",
+                    "rightValue": "media",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "cond-media"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "media"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.contentType }}",
+                    "rightValue": "url",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "cond-url"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "url"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.contentType }}",
+                    "rightValue": "text",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "cond-text"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "text"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fdae5b6a-73a5-4c83-bd61-a48227e0432e",
+      "name": "Switch: Input Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        5760,
+        3392
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $json.chatId }}",
+        "messageId": "={{ $json.statusMsgId }}",
+        "text": "📥 Скачиваю файл из Telegram...",
+        "additionalFields": {}
+      },
+      "id": "857c61a3-0264-4351-a1e3-67e79167a108",
+      "name": "Status: Getting File",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        5952,
+        3088
+      ],
+      "webhookId": "04c42f1d-231c-455b-977f-bc0ae5673a67",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $('Switch: Input Type').item.json.fileId }}",
+        "additionalFields": {}
+      },
+      "id": "2c72d3f1-a4ff-44f8-8208-9ef7d70fb434",
+      "name": "TG: Get & Download File",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        6160,
+        3088
+      ],
+      "webhookId": "e077dda8-9505-4c60-b12a-c82e6aaa4eb9",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $('Switch: Input Type').item.json.chatId }}",
+        "messageId": "={{ $('Switch: Input Type').item.json.statusMsgId }}",
+        "text": "🎙️ Транскрибирую аудио...",
+        "additionalFields": {}
+      },
+      "id": "2f7cb425-7b01-495e-9778-dc85d7780a53",
+      "name": "Status: Transcribing Media",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        6352,
+        3088
+      ],
+      "webhookId": "11fe1a5e-3daf-4b2a-877c-92600a3f80bb",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.24.120:9000/transcribe",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 1200000
+        }
+      },
+      "id": "fd214720-58ee-47c8-9cba-eb900d87706a",
+      "name": "Whisper: Media",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6768,
+        3088
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $json.text || $json.transcription || '';\nconst prev = $('Switch: Input Type').item.json;\nreturn [{ json: { ...prev, text } }];"
+      },
+      "id": "7b55f53b-f381-4a7a-8c40-32946b2b0db2",
+      "name": "Merge: Media",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6960,
+        3088
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $json.chatId }}",
+        "messageId": "={{ $json.statusMsgId }}",
+        "text": "🌐 Скачиваю видео...",
+        "additionalFields": {}
+      },
+      "id": "a74801d2-b165-460c-bee5-3be00cade6c4",
+      "name": "Status: Downloading URL",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        5952,
+        3392
+      ],
+      "webhookId": "025ca604-3353-4f04-88d6-96aa67552bfc",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.24.120:9001/api/download",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"url\": \"{{ $('Switch: Input Type').item.json.content }}\",\n  \"format\": \"audio\"\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "c32eb571-a403-40fb-ac53-816141fa49ce",
+      "name": "YTDL Download",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6160,
+        3392
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "check-token",
+              "leftValue": "={{ $json.token }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0c563a1a-dcd9-4cea-98e2-d3e7af5edc73",
+      "name": "YTDL: Got token?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6352,
+        3392
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $('Switch: Input Type').item.json.chatId }}",
+        "messageId": "={{ $('Switch: Input Type').item.json.statusMsgId }}",
+        "text": "=❌ Не удалось скачать видео\n\nПроверь ссылку — возможно она недоступна или не поддерживается.\n\n{{ $json.error || $json.detail || '' }}",
+        "additionalFields": {}
+      },
+      "id": "311b7fcf-158a-453a-9570-61a4345ef702",
+      "name": "YTDL: Error Notify",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        6768,
+        3280
+      ],
+      "webhookId": "24f0e2b2-b317-4588-ac0d-4258a8b88a58",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=http://192.168.24.120:9001/file/{{ $json.token }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "audioFile"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "6992edb4-51a6-46b2-aa01-4ccb047f5d66",
+      "name": "YTDL: Get File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6560,
+        3504
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $('Switch: Input Type').item.json.chatId }}",
+        "messageId": "={{ $('Switch: Input Type').item.json.statusMsgId }}",
+        "text": "🎙️ Транскрибирую видео...",
+        "additionalFields": {}
+      },
+      "id": "d78526ee-5f38-4d6f-ab75-f134ebca9e13",
+      "name": "Status: Transcribing URL",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        6752,
+        3504
+      ],
+      "webhookId": "d9baf958-3cc0-4e30-b89e-febcad63080f",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.24.120:9000/transcribe",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "audioFile"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 1200000
+        }
+      },
+      "id": "cf240147-4df6-4b7f-8620-98d34e97bdbe",
+      "name": "Whisper: URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7168,
+        3504
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $json.text || $json.transcription || '';\nconst prev = $('Switch: Input Type').item.json;\nreturn [{ json: { ...prev, text } }];"
+      },
+      "id": "746ffc1d-4a32-4997-8344-4476a9621449",
+      "name": "Merge: URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7360,
+        3504
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Switch: Input Type').item.json;\nreturn [{ json: { ...prev, text: prev.content } }];"
+      },
+      "id": "3a6b559d-e6d9-4be3-86d2-a605b2e5905a",
+      "name": "Merge: Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5952,
+        3632
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $json.chatId }}",
+        "messageId": "={{ $json.statusMsgId }}",
+        "text": "🧠 Классифицирую...",
+        "additionalFields": {}
+      },
+      "id": "224426a1-4345-4811-815c-8e3257cda1cd",
+      "name": "Status: Classifying",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        7616,
+        3376
+      ],
+      "webhookId": "f7301eea-a08f-42b1-9f06-25c2f0afe989",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.24.120:9002/completion",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"system_prompt\": \"You are a strict text classifier. Output ONLY a valid JSON object. No text, no markdown, no explanation.\",\n  \"prompt\": \"Classify the text and return JSON.\\n\\nJSON structure:\\n{\\\"type\\\":\\\"note|question|task|plain\\\",\\\"category\\\":\\\"tech|linux|servers|programming|docker|networking|devops|sysadmin|security|database|cloud|hardware|idea|personal|finance|health|food|travel|language|science|other\\\",\\\"tags\\\":[\\\"tag1\\\",\\\"tag2\\\"],\\\"title\\\":\\\"short title\\\",\\\"lang\\\":\\\"ru|en|mixed\\\"}\\n\\nCLASSIFICATION RULES:\\n\\nSTEP 1 — Check length and structure:\\n- Text under 10 words AND no technical/factual content = plain or question\\n- Text over 80 words = almost always note (transcription, explanation, article)\\n- Text with spoken language markers ('я показал', 'смотрим', 'во-первых', 'то есть', 'собственно') = note\\n\\nSTEP 2 — Determine type:\\nplain = greetings, small talk, single words, emotional messages, no useful information\\n  Examples: 'Привет', 'как дела', 'окей', 'спасибо', 'Привет как тебя зовут?', 'пока'\\n  IMPORTANT: If text starts with greeting but contains useful content after — classify by the content NOT the greeting\\n\\nquestion = asks for a specific fact or answer, short direct questions\\n  Examples: 'сколько часов в неделе', 'что такое docker', 'как установить nginx', 'какой синтаксис у cron'\\n\\nnote = information worth saving: facts, instructions, how-tos, definitions, long explanations, transcriptions\\n  Examples: long technical text, video transcription, 'docker run -p 80:80 nginx запускает контейнер...'\\n\\ntask = action item, reminder, todo\\n  Examples: 'купить молоко', 'не забыть позвонить', 'обновить сервер до пятницы'\\n\\nIF IN DOUBT between plain and question — use question\\nIF IN DOUBT between plain and note — check length: over 30 words = note, under 30 = plain\\nIF IN DOUBT between question and note — over 50 words = note\\n\\nCATEGORY RULES:\\ntech = general technology topics\\nlinux = linux commands, bash, shell scripting\\nservers = server setup, nginx, apache, systemd, services\\nprogramming = code, algorithms, languages, frameworks\\ndocker = containers, docker-compose, images, volumes\\nnetworking = tcp/ip, dns, vpn, firewall, ports, protocols\\ndevops = ci/cd, pipelines, ansible, terraform, monitoring, deployment\\nsysadmin = system administration, users, permissions, backups, cron\\nsecurity = ssl, certificates, auth, vulnerabilities, hardening\\ndatabase = sql, postgres, mysql, redis, mongodb, queries\\ncloud = aws, gcp, azure, vps, s3, cloud services\\nhardware = cpu, gpu, ram, disk, physical components\\nidea = creative idea, concept, brainstorm\\npersonal = personal life, relationships, habits\\nfinance = money, budget, investments, expenses\\nhealth = medical, fitness, wellbeing\\nfood = recipes, nutrition, restaurants\\ntravel = places, trips, logistics\\nlanguage = grammar, translation, linguistics\\nscience = physics, math, biology, chemistry\\nother = does not fit any category\\n\\ntags: 2-3 lowercase keywords from actual content (not category names)\\ntitle: 3-6 words in same language as text\\nlang: ru / en / mixed\\n\\nText: {{ ($if($('Merge: Text').isExecuted, $('Merge: Text').item.json.text, '') || $if($('Merge: Media').isExecuted, $('Merge: Media').item.json.text, '') || $if($('Merge: URL').isExecuted, $('Merge: URL').item.json.text, '')).substring(0, 800) }}\",\n  \"temperature\": 0,\n  \"n_predict\": 200,\n  \"json_schema\": {\n    \"type\": \"object\",\n    \"properties\": {\n      \"type\":     { \"type\": \"string\", \"enum\": [\"note\",\"question\",\"task\",\"plain\"] },\n      \"category\": { \"type\": \"string\", \"enum\": [\"tech\",\"linux\",\"servers\",\"programming\",\"docker\",\"networking\",\"devops\",\"sysadmin\",\"security\",\"database\",\"cloud\",\"hardware\",\"idea\",\"personal\",\"finance\",\"health\",\"food\",\"travel\",\"language\",\"science\",\"other\"] },\n      \"tags\":     { \"type\": \"array\", \"items\": { \"type\": \"string\" }, \"minItems\": 2, \"maxItems\": 3 },\n      \"title\":    { \"type\": \"string\" },\n      \"lang\":     { \"type\": \"string\", \"enum\": [\"ru\",\"en\",\"mixed\"] }\n    },\n    \"required\": [\"type\",\"category\",\"tags\",\"title\",\"lang\"]\n  }\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "d7426ace-98e5-474d-8724-e84473c40533",
+      "name": "llama.cpp Classify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7808,
+        3376
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "let classification;\ntry {\n  const raw = $json.content || $json.response || '{}';\n  classification = typeof raw === 'string' ? JSON.parse(raw) : raw;\n} catch(e) {\n  classification = { type: 'plain', category: 'other', tags: ['unclassified'], title: 'Без темы', lang: 'ru' };\n}\n\n// Тянем текст из всех источников\nconst prev = $('Status: Classifying').first().json;\nlet text = prev.text || '';\nif (!text) { try { text = $('Merge: Media').first().json.text || ''; } catch(e) {} }\nif (!text) { try { text = $('Merge: URL').first().json.text || ''; } catch(e) {} }\nif (!text) { try { text = $('Merge: Text').first().json.text || ''; } catch(e) {} }\n\n// Пост-обработка: исправляем ошибки модели\nconst wordCount = text.trim().split(/\\s+/).length;\nconst lowerText = text.toLowerCase().trim();\n\n// 1. Короткий текст — модель часто ошибается с note\nif (wordCount <= 10 && classification.type === 'note') {\n  const questionWords = ['что', 'как', 'где', 'когда', 'почему', 'зачем', 'сколько', 'какой', 'какая', 'какие', 'кто', 'чем', 'what', 'how', 'where', 'when', 'why', 'who', 'which'];\n  const hasQuestion = lowerText.includes('?') || questionWords.some(w => lowerText.startsWith(w) || lowerText.includes(' ' + w + ' '));\n  classification.type = hasQuestion ? 'question' : 'plain';\n}\n\n// 2. Приветствия с small talk — всегда plain\nconst greetings = ['привет', 'здравствуй', 'хай', 'салют', 'добрый день', 'добрый вечер', 'доброе утро', 'hello', 'hi ', 'hey '];\nconst smallTalk = ['как тебя зовут', 'как дела', 'что делаешь', 'ты кто', 'кто ты', 'как твои дела', 'what is your name', 'how are you'];\nif (wordCount <= 15 && greetings.some(g => lowerText.startsWith(g)) && smallTalk.some(p => lowerText.includes(p))) {\n  classification.type = 'plain';\n}\n\n// 3. Длинный текст — не может быть plain\nif (wordCount >= 80 && classification.type === 'plain') {\n  classification.type = 'note';\n}\n\nreturn [{ json: { ...prev, classification, text } }];"
+      },
+      "id": "32635a78-6c76-4389-8e36-b4ebcc52a8cc",
+      "name": "Parse Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8016,
+        3376
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.classification.type }}",
+                    "rightValue": "note",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "cond-note"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "note"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.classification.type }}",
+                    "rightValue": "task",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "cond-task"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "task"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.classification.type }}",
+                    "rightValue": "question",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "cond-q"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "question"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.classification.type }}",
+                    "rightValue": "plain",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "cond-plain"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "plain"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d8a6228e-fc84-44b0-83c1-7fe80b314f3d",
+      "name": "Switch: Note or Answer",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        8208,
+        3376
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $('Attach Status ID').first().json.chatId }}",
+        "messageId": "={{ $('Attach Status ID').first().json.statusMsgId }}",
+        "text": "📝 Формирую заметку...",
+        "additionalFields": {}
+      },
+      "id": "af0a6997-03f2-41b3-85b2-a26d4fd1a237",
+      "name": "Status: Formatting Note",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        8416,
+        3184
+      ],
+      "webhookId": "f3d2686f-ddff-47ed-bbbf-f196e0dfbf85",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Parse Classification').item.json.text }}",
+        "options": {
+          "systemMessage": "==You are an expert Obsidian note-making assistant. Your job is to transform raw transcribed text into a clean, dense, useful Obsidian note.\n\nRULES:\n- Output ONLY the note. Nothing before ---, nothing after the last line.\n- Keep the ORIGINAL LANGUAGE of the text (ru/en/mixed).\n- Remove ALL filler: repetitions, \"so\", \"basically\", \"you know\", verbal noise, meta-commentary (\"in this video I will...\"), sign-offs.\n- Keep ONLY facts, parameters, conclusions, actionable tips.\n- Use ## subheadings to group related ideas.\n- Use bullet points for lists of parameters/options.\n- Bold **key terms** and **values**.\n\nOUTPUT FORMAT — start your response with --- immediately:\n---\ntitle: {{ $('Parse Classification').item.json.classification.title }}\ndate: {{ new Date().toISOString().split('T')[0] }}\ncategory: {{ $('Parse Classification').item.json.classification.category }}\ntags: [{{ $('Parse Classification').item.json.classification.tags.join(', ') }}]\n---\n\n# {{ $('Parse Classification').item.json.classification.title }}\n\n## Summary\n<2-3 sentence dense summary of the main idea>\n\n## Key Points\n<structured content with ## subheadings and bullet points>\n\n## Takeaways\n<actionable conclusions, if any>"
+        }
+      },
+      "id": "43f9bbad-08b4-4428-b160-b6a234913839",
+      "name": "Agent: Format Note",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        8608,
+        3184
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "model": "nvidia/nemotron-3-super-120b-a12b:free",
+        "options": {}
+      },
+      "id": "0fec12d5-6635-4bce-992a-2b07b620e99e",
+      "name": "OpenRouter: Note Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        8608,
+        3376
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "APIII",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const noteContent = $json.output || '';\nconst prev = $('Parse Classification').item.json;\nconst cl = prev.classification;\n\n// Вытаскиваем title из первой строки frontmatter агента\n// Агент отдаёт: \"---\\ntitle: docker server\\n...\"\nlet titleFromNote = '';\nconst titleMatch = noteContent.match(/^---[\\s\\S]*?title:\\s*(.+)/m);\nif (titleMatch) {\n  titleFromNote = titleMatch[1].trim();\n}\n\n// Фоллбэк на classification.title\nconst rawTitle = titleFromNote || cl.title || 'note';\n\nconst safeTitle = rawTitle\n  .toLowerCase()\n  .replace(/[^a-zа-яё0-9\\s-]/gi, '')\n  .trim()\n  .replace(/\\s+/g, '-')\n  .substring(0, 60);\n\nconst category = cl.category || 'other';\nconst filename = `${safeTitle}.md`;\nconst filepath = `/obsidian/${category}/${filename}`;\n\nreturn [{ json: { ...prev, noteContent, filepath, filename, category } }];"
+      },
+      "id": "4516e509-d973-417a-b5e3-ed0ba9882348",
+      "name": "Build File Path",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8928,
+        3168
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\n\nconst filepath = $json.filepath;\nconst content = $json.noteContent;\n\nif (!content) {\n  throw new Error('noteContent is empty — агент не вернул текст');\n}\n\nconst dir = path.dirname(filepath);\n\nif (!fs.existsSync(dir)) {\n  fs.mkdirSync(dir, { recursive: true });\n}\n\nfs.writeFileSync(filepath, content, 'utf8');\n\nreturn [{ json: $json }];"
+      },
+      "id": "edc374d4-b7c0-471e-807d-95102b351c16",
+      "name": "Write to Obsidian",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9120,
+        3168
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $('Status: Formatting Note').item.json.result.chat.id }}",
+        "messageId": "={{ $('Status: Formatting Note').item.json.result.message_id }}",
+        "text": "=✅ Заметка сохранена!\n\n📁 {{ $json.category }}/{{ $json.filename }}\n🏷️ #{{ $json.classification.tags.join(' #') }}",
+        "additionalFields": {}
+      },
+      "id": "4e1c2c27-cf7a-46f6-ad6f-5022d537e7f0",
+      "name": "Confirm: Note Saved",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        9296,
+        3168
+      ],
+      "webhookId": "64cc7590-fe26-4aab-b32c-6576e1e20fb6",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $('Attach Status ID').first().json.chatId }}",
+        "messageId": "={{ $('Attach Status ID').first().json.statusMsgId }}",
+        "text": "💬 Думаю над ответом...",
+        "additionalFields": {}
+      },
+      "id": "3df4d520-e224-4416-b942-f536fc7491f7",
+      "name": "Status: Answering",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        8416,
+        3584
+      ],
+      "webhookId": "b856fcee-7cee-4a76-b9e1-8a8fc0672f0b",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Parse Classification').item.json.text }}",
+        "options": {
+          "systemMessage": "You are a helpful personal assistant. Answer concisely in the same language as the user message. \nNo preamble, no intro phrases, just the answer.\nKeep the response short — it will be sent as a Telegram message.\nUse plain text only. No markdown, no bullet points unless absolutely necessary.\nMax 3-4 sentences."
+        }
+      },
+      "id": "3ec29a11-b1c6-4587-a092-b62ad5541544",
+      "name": "Agent: Answer",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        8608,
+        3584
+      ]
+    },
+    {
+      "parameters": {
+        "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "options": {}
+      },
+      "id": "12f8f6e1-f619-46d3-aef4-2cf58bb4cc96",
+      "name": "OpenRouter: Answer Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        8608,
+        3776
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "APIIII",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $('Attach Status ID').first().json.chatId }}",
+        "messageId": "={{ $('Attach Status ID').first().json.statusMsgId }}",
+        "text": "={{ $json.output }}",
+        "additionalFields": {}
+      },
+      "id": "636b5457-006a-4fec-99ba-5af9af132e7b",
+      "name": "Send Answer",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        9216,
+        3568
+      ],
+      "webhookId": "e558d64a-4a01-4864-839a-d16218beb92a",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ]
+      },
+      "type": "n8n-nodes-telegram-polling.telegramPollingTrigger",
+      "typeVersion": 1,
+      "position": [
+        4960,
+        3392
+      ],
+      "id": "56c32e66-d5e4-45f2-9ed4-9a0d28d50655",
+      "name": "Telegram Trigger",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM API",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const binary = $('YTDL: Get File').item.binary;\nreturn [{ json: $json, binary }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6960,
+        3504
+      ],
+      "id": "584e957f-b842-4e23-bbae-fe79e5f71aab",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "const binary = $('TG: Get & Download File').item.binary;\nreturn [{ json: $json, binary }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6560,
+        3088
+      ],
+      "id": "f0c0d81b-da6e-4a46-bfd6-5a5460374e06",
+      "name": "Code in JavaScript1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Detect Content Type": {
+      "main": [
+        [
+          {
+            "node": "Send Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Status": {
+      "main": [
+        [
+          {
+            "node": "Attach Status ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Status ID": {
+      "main": [
+        [
+          {
+            "node": "Switch: Input Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch: Input Type": {
+      "main": [
+        [
+          {
+            "node": "Status: Getting File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Status: Downloading URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge: Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status: Getting File": {
+      "main": [
+        [
+          {
+            "node": "TG: Get & Download File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TG: Get & Download File": {
+      "main": [
+        [
+          {
+            "node": "Status: Transcribing Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status: Transcribing Media": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Whisper: Media": {
+      "main": [
+        [
+          {
+            "node": "Merge: Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge: Media": {
+      "main": [
+        [
+          {
+            "node": "Status: Classifying",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status: Downloading URL": {
+      "main": [
+        [
+          {
+            "node": "YTDL Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YTDL Download": {
+      "main": [
+        [
+          {
+            "node": "YTDL: Got token?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YTDL: Got token?": {
+      "main": [
+        [
+          {
+            "node": "YTDL: Get File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "YTDL: Error Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YTDL: Get File": {
+      "main": [
+        [
+          {
+            "node": "Status: Transcribing URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status: Transcribing URL": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Whisper: URL": {
+      "main": [
+        [
+          {
+            "node": "Merge: URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge: URL": {
+      "main": [
+        [
+          {
+            "node": "Status: Classifying",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge: Text": {
+      "main": [
+        [
+          {
+            "node": "Status: Classifying",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status: Classifying": {
+      "main": [
+        [
+          {
+            "node": "llama.cpp Classify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "llama.cpp Classify": {
+      "main": [
+        [
+          {
+            "node": "Parse Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Classification": {
+      "main": [
+        [
+          {
+            "node": "Switch: Note or Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch: Note or Answer": {
+      "main": [
+        [
+          {
+            "node": "Status: Formatting Note",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Status: Formatting Note",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Status: Answering",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Status: Answering",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status: Formatting Note": {
+      "main": [
+        [
+          {
+            "node": "Agent: Format Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter: Note Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agent: Format Note",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent: Format Note": {
+      "main": [
+        [
+          {
+            "node": "Build File Path",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build File Path": {
+      "main": [
+        [
+          {
+            "node": "Write to Obsidian",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write to Obsidian": {
+      "main": [
+        [
+          {
+            "node": "Confirm: Note Saved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status: Answering": {
+      "main": [
+        [
+          {
+            "node": "Agent: Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter: Answer Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agent: Answer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent: Answer": {
+      "main": [
+        [
+          {
+            "node": "Send Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Detect Content Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Whisper: URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Whisper: Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "feb7a356-4a8f-40a6-8e3b-abc7a6959e33",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7d813647fbd50cd790a62192b7a898946e538eeb64727ebb74ca3ce40afc05a8"
+  },
+  "id": "FchLu1HejVCAxzX6",
+  "tags": []
+}

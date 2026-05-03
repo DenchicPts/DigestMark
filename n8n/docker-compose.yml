@@ -1,0 +1,21 @@
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=100.102.201.230
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=http://100.102.201.230:5678/
+      - GENERIC_TIMEZONE=Europe/Riga
+      - N8N_METRICS=false
+      - N8N_SECURE_COOKIE=false
+      - NODE_FUNCTION_ALLOW_BUILTIN=fs,path
+      - NODE_FUNCTION_ALLOW_EXTERNAL=*
+    volumes:
+      - ./.n8n:/home/node/.n8n
+      - ./local-files:/files
+      - /mnt/obsidian:/obsidian

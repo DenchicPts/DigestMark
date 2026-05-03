@@ -1,0 +1,32 @@
+services:
+  bgutil:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    container_name: bgutil
+    restart: unless-stopped
+    init: true
+    ports:
+      - "4416:4416"
+
+  ytdl:
+    build: .
+    container_name: ytdl
+    restart: unless-stopped
+    depends_on:
+      - bgutil
+    ports:
+      - "9001:9001"
+    volumes:
+      - ./video:/app/video
+    environment:
+      - IDLE_TTL=300
+      - FETCH_TTL=180
+      - MAX_WORKERS=3
+      - DOWNLOAD_DIR=/app/video
+      - POT_HOST=bgutil
+      - POT_PORT=4416
+    mem_limit: 2g
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
