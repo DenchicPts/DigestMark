@@ -42,24 +42,24 @@ GPU не требуется — всё работает на CPU.
 Транскрибация аудио и видео файлов через [faster-whisper](https://github.com/SYSTRAN/faster-whisper).  
 По умолчанию используется модель **Whisper medium** — хороший баланс скорости и точности для русского и английского языков. Модель скачивается автоматически при первом запуске.  
 Доступна замена на `tiny` / `base` / `small` / `large-v3-turbo` через переменную `MODEL_SIZE`.  
-→ [README](audio-transcribe/README)
+→ [README](audio-transcribe/README.md)
 
 ### 🧠 llama.cpp
 Локальная классификация текста через [llama.cpp server](https://github.com/ggml-org/llama.cpp).  
 Используется модель **phi-3-mini-q4** (Microsoft) — 3.8B параметров, работает полностью на CPU, занимает ~2GB RAM.  
 Определяет тип входящего текста (`note`, `question`, `task`, `plain`) и категорию (`tech`, `docker`, `linux`, `personal` и др.).  
-→ [README](llama.cpp/README)
+→ [README](llama.cpp/README.md)
 
 ### 📥 yt-downloader
 Скачивание аудио из видео по ссылке через [yt-dlp](https://github.com/yt-dlp/yt-dlp).  
 Поддерживает YouTube, TikTok, Vimeo. Включает [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) для обхода защиты YouTube.  
 Возвращает токен — по нему n8n забирает файл и передаёт в Whisper.  
-→ [README](yt-downloader/README)
+→ [README](yt-downloader/README.md)
 
 ### ⚙️ n8n
 Оркестратор всего pipeline. Связывает Telegram, все сервисы и Obsidian в единый поток.  
 Воркфлоу хранится в `workflows/Telegram AI Pipeline.json`.  
-→ [README](n8n/README)
+→ [README](n8n/README.md)
 
 ## Quick Start
 
@@ -95,7 +95,7 @@ docker compose up -d
 
 ### 5. Настрой воркфлоу
 
-Подробная инструкция → [n8n/README](n8n/README)
+Подробная инструкция → [n8n/README](n8n/README.md)
 
 ## API
 
