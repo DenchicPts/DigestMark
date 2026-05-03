@@ -252,7 +252,7 @@ def _run_download(
                 "total_mb":      round(total / 1024 / 1024, 2),
             })
         elif d["status"] == "finished":
-            _push({"type": "processing", "message": "Обработка файла…"})
+            _push({"type": "processing", "message": "processing"})
 
     is_audio = fmt == "audio"
 

@@ -1,37 +1,37 @@
 # yt-downloader — Video Download Service
 
-Микросервис для скачивания аудио из видео по ссылке (YouTube, TikTok, Instagram и др.) через yt-dlp. Возвращает токен по которому можно забрать файл.
+A microservice for downloading audio and video by URL (YouTube, TikTok, Instagram, and more) via yt-dlp. Returns a token that can be used to retrieve the file.
 
-Включает [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) — обходит защиту YouTube от ботов (PO Token).
+Includes [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) — bypasses YouTube's bot protection (PO Token).
 
-## Требования
+## Requirements
 
 - Docker + Docker Compose
-- RAM: до 500MB
-- Место на диске: временные файлы в `./video/` (очищаются автоматически)
+- RAM: up to 500 MB
+- Disk space: temporary files in `./video/` (cleaned up automatically)
 
-## Запуск
+## Getting Started
 
 ```bash
 docker compose up -d
 ```
 
-Сервис доступен на `http://localhost:9001`
+The service will be available at `http://localhost:9001`
 
-## Конфигурация
+## Configuration
 
-| Переменная | По умолчанию | Описание |
+| Variable | Default | Description |
 |---|---|---|
-| `IDLE_TTL` | `300` | Секунд до удаления неактивного файла |
-| `FETCH_TTL` | `180` | Секунд на скачивание одного файла |
-| `MAX_WORKERS` | `3` | Максимум параллельных загрузок |
-| `DOWNLOAD_DIR` | `/app/video` | Папка для временных файлов |
-| `POT_HOST` | `bgutil` | Хост bgutil сервиса |
-| `POT_PORT` | `4416` | Порт bgutil сервиса |
+| `IDLE_TTL` | `300` | Seconds before an inactive file is deleted |
+| `FETCH_TTL` | `180` | Seconds allowed to download a single file |
+| `MAX_WORKERS` | `3` | Maximum number of parallel downloads |
+| `DOWNLOAD_DIR` | `/app/video` | Directory for temporary files |
+| `POT_HOST` | `bgutil` | bgutil service host |
+| `POT_PORT` | `4416` | bgutil service port |
 
 ## API
 
-### Скачать аудио по ссылке
+### Download by URL
 
 ```bash
 curl -X POST http://localhost:9001/api/download \
@@ -39,27 +39,27 @@ curl -X POST http://localhost:9001/api/download \
   -d '{"url": "https://youtube.com/watch?v=...", "format": "audio"}'
 ```
 
-Ответ:
+Response:
 ```json
 {
   "token": "abc123"
 }
 ```
 
-### Получить файл по токену
+### Retrieve the File by Token
 
 ```bash
 curl http://localhost:9001/file/abc123 -o audio.mp3
 ```
 
-### Проверка статуса
+### Health Check
 
 ```bash
 curl http://localhost:9001/health
 ```
 
-## Заметки
+## Notes
 
-- Файлы хранятся временно — удаляются через `IDLE_TTL` секунд после скачивания
-- bgutil запускается первым (`depends_on`), ytdl ждёт его готовности
-- YouTube периодически меняет защиту — обновляй образ `brainicism/bgutil-ytdlp-pot-provider` при проблемах со скачиванием
+- Files are stored temporarily — deleted after `IDLE_TTL` seconds from the time of download
+- bgutil starts first (`depends_on`), ytdl waits for it to be ready
+- YouTube periodically changes its bot protection — update the `brainicism/bgutil-ytdlp-pot-provider` image if downloads start failing

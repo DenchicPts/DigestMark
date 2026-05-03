@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" id="html-root">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Whisper — транскрибация</title>
+<title>Whisper — transcription</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -85,7 +85,6 @@
   .lang-badge { background: rgba(34,211,238,0.1); border: 1px solid rgba(34,211,238,0.25); color: var(--accent2); }
   .time-badge { background: rgba(74,222,128,0.08); border: 1px solid rgba(74,222,128,0.2); color: var(--accent); }
 
-  /* Streaming text area */
   .result-text {
     background: var(--bg); border: 1px solid var(--border);
     border-radius: 6px; padding: 16px;
@@ -95,11 +94,8 @@
   }
   .seg-inline { display: inline; }
   .seg-inline.new { color: var(--accent); transition: color 1.5s; }
-
-  /* Cursor blink while streaming */
   .cursor { display: inline-block; width: 2px; height: 1em; background: var(--accent); margin-left: 2px; animation: blink 0.8s infinite; vertical-align: text-bottom; }
 
-  /* Segments accordion */
   details { margin-top: 12px; }
   summary { font-family: var(--mono); font-size: 11px; color: var(--muted); cursor: pointer; user-select: none; letter-spacing: 0.05em; }
   summary:hover { color: var(--text); }
@@ -110,70 +106,163 @@
 
   #copyBtn { background: none; border: 1px solid var(--border); color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; padding: 4px 10px; border-radius: 4px; cursor: pointer; transition: all 0.15s; text-transform: uppercase; }
   #copyBtn:hover { color: var(--text); border-color: var(--text); }
+
+  /* Lang switcher */
+  .lang-switcher {
+    position: fixed; top: 16px; right: 16px;
+    display: flex; gap: 4px; z-index: 100;
+  }
+  .lang-btn {
+    font-family: var(--mono); font-size: 11px;
+    padding: 4px 10px; border-radius: 4px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg);
+    color: var(--muted); transition: all 0.15s; letter-spacing: 0.06em;
+  }
+  .lang-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .lang-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(74,222,128,0.08); }
 </style>
 </head>
 <body>
+
+<div class="lang-switcher">
+  <button class="lang-btn active" data-lang="ru">RU</button>
+  <button class="lang-btn" data-lang="en">EN</button>
+</div>
+
 <header>
   <div class="logo">faster-whisper // local asr</div>
-  <h1>Транскри<span>бация</span></h1>
-  <div class="subtitle">загрузи файл — текст появляется по мере обработки</div>
+  <h1 id="h1-heading"></h1>
+  <div class="subtitle" id="subtitle"></div>
 </header>
 
 <div class="card">
   <div class="dropzone" id="dropzone">
     <input type="file" id="fileInput" accept="audio/*,video/*,.ogg,.opus,.flac,.weba,.webm,.amr,.3gp">
     <div class="drop-icon">🎙</div>
-    <div class="drop-label"><strong>Выбери файл</strong> или перетащи сюда</div>
+    <div class="drop-label" id="dropLabel"></div>
     <div class="drop-formats">mp3 · mp4 · ogg · wav · flac · m4a · webm · opus · mov · avi · mkv · amr · 3gp</div>
   </div>
   <div class="file-preview" id="filePreview"><span>📎</span><span id="fileName"></span></div>
 
   <div class="options">
     <div class="field">
-      <label>Язык</label>
+      <label id="labelLang"></label>
       <select id="langSelect">
-        <option value="">Авто-определение</option>
+        <option value="" id="opt-auto"></option>
         <option value="ru">Русский</option>
-        <option value="lv">Латышский</option>
+        <option value="lv">Latviešu</option>
         <option value="en">English</option>
         <option value="de">Deutsch</option>
-        <option value="uk">Украинский</option>
+        <option value="uk">Українська</option>
         <option value="pl">Polski</option>
       </select>
     </div>
     <div class="field">
-      <label>Режим</label>
+      <label id="labelMode"></label>
       <select id="taskSelect">
-        <option value="transcribe">Транскрибация</option>
-        <option value="translate">Перевод в EN</option>
+        <option value="transcribe" id="opt-transcribe"></option>
+        <option value="translate" id="opt-translate"></option>
       </select>
     </div>
   </div>
 
-  <button id="submitBtn" disabled>Транскрибировать</button>
+  <button id="submitBtn" disabled></button>
   <div class="status" id="status"></div>
   <div class="error-box" id="errorBox"></div>
 
   <div id="result">
     <div class="result-header">
-      <span class="result-label">Результат</span>
+      <span class="result-label" id="resultLabel"></span>
       <div style="display:flex;gap:8px;align-items:center">
         <div class="badges">
           <span class="badge lang-badge" id="langBadge"></span>
           <span class="badge time-badge" id="timeBadge"></span>
         </div>
-        <button id="copyBtn">Копировать</button>
+        <button id="copyBtn"></button>
       </div>
     </div>
     <div class="result-text" id="resultText"></div>
     <details id="segDetails">
-      <summary>▸ Сегменты с таймкодами</summary>
+      <summary id="segSummary"></summary>
       <div class="segments" id="segments"></div>
     </details>
   </div>
 </div>
 
 <script>
+// ── i18n ──
+const TRANSLATIONS = {
+  ru: {
+    h1:            'Транскри<span>бация</span>',
+    subtitle:      'загрузи файл — текст появляется по мере обработки',
+    drop_label:    '<strong>Выбери файл</strong> или перетащи сюда',
+    label_lang:    'Язык',
+    label_mode:    'Режим',
+    opt_auto:      'Авто-определение',
+    opt_transcribe:'Транскрибация',
+    opt_translate: 'Перевод в EN',
+    submit_btn:    'Транскрибировать',
+    result_label:  'Результат',
+    copy_btn:      'Копировать',
+    copy_done:     'Скопировано!',
+    seg_summary:   '▸ Сегменты с таймкодами',
+    status_processing: 'Обрабатываю...',
+    status_done:   'Готово ✓',
+  },
+  en: {
+    h1:            'Trans<span>cription</span>',
+    subtitle:      'upload a file — text appears as it is processed',
+    drop_label:    '<strong>Choose a file</strong> or drag it here',
+    label_lang:    'Language',
+    label_mode:    'Mode',
+    opt_auto:      'Auto-detect',
+    opt_transcribe:'Transcribe',
+    opt_translate: 'Translate to EN',
+    submit_btn:    'Transcribe',
+    result_label:  'Result',
+    copy_btn:      'Copy',
+    copy_done:     'Copied!',
+    seg_summary:   '▸ Segments with timestamps',
+    status_processing: 'Processing...',
+    status_done:   'Done ✓',
+  },
+};
+
+let currentLang = localStorage.getItem('transcribe_lang') || 'ru';
+
+function t(key) {
+  return TRANSLATIONS[currentLang][key] || TRANSLATIONS.ru[key] || key;
+}
+
+function applyTranslations() {
+  document.getElementById('html-root').lang = currentLang;
+  document.getElementById('h1-heading').innerHTML = t('h1');
+  document.getElementById('subtitle').textContent = t('subtitle');
+  document.getElementById('dropLabel').innerHTML = t('drop_label');
+  document.getElementById('labelLang').textContent = t('label_lang');
+  document.getElementById('labelMode').textContent = t('label_mode');
+  document.getElementById('opt-auto').textContent = t('opt_auto');
+  document.getElementById('opt-transcribe').textContent = t('opt_transcribe');
+  document.getElementById('opt-translate').textContent = t('opt_translate');
+  document.getElementById('submitBtn').textContent = t('submit_btn');
+  document.getElementById('resultLabel').textContent = t('result_label');
+  document.getElementById('copyBtn').textContent = t('copy_btn');
+  document.getElementById('segSummary').textContent = t('seg_summary');
+
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === currentLang);
+  });
+}
+
+document.querySelectorAll('.lang-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentLang = btn.dataset.lang;
+    localStorage.setItem('transcribe_lang', currentLang);
+    applyTranslations();
+  });
+});
+
+// ── App ──
 const $ = id => document.getElementById(id);
 const fileInput = $('fileInput'), dropzone = $('dropzone'),
       submitBtn = $('submitBtn'), statusEl = $('status'),
@@ -185,7 +274,6 @@ const fileInput = $('fileInput'), dropzone = $('dropzone'),
 let selectedFile = null, timerInterval = null, startTime = null;
 let cursor = null;
 
-// --- drag & drop ---
 dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
 dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('dragover'); const f = e.dataTransfer.files[0]; if (f) setFile(f); });
@@ -212,7 +300,7 @@ function startTimer() {
     const s = Math.floor((Date.now() - startTime) / 1000);
     const m = Math.floor(s / 60).toString().padStart(2, '0');
     const sec = (s % 60).toString().padStart(2, '0');
-    setStatus(`Обрабатываю... ${m}:${sec}`, true);
+    setStatus(`${t('status_processing')} ${m}:${sec}`, true);
   }, 500);
 }
 
@@ -235,19 +323,15 @@ function removeCursor() {
 }
 
 function addSegment(seg) {
-  // Добавить в inline текст
   removeCursor();
   const span = document.createElement('span');
   span.className = 'seg-inline new';
   span.textContent = (resultText.textContent ? ' ' : '') + seg.text;
   resultText.appendChild(span);
-  // Убрать highlight через 1.5s
   setTimeout(() => span.classList.remove('new'), 1500);
   addCursor();
-  // Скролл вниз
   resultText.scrollTop = resultText.scrollHeight;
 
-  // В аккордеон
   const el = document.createElement('div');
   el.className = 'seg';
   el.innerHTML = `<span class="seg-time">${fmt(seg.start)} → ${fmt(seg.end)}</span><span>${seg.text}</span>`;
@@ -278,12 +362,10 @@ submitBtn.addEventListener('click', async () => {
     const res = await fetch(url, { method: 'POST', body: form });
 
     if (!res.ok) {
-      // Сервер вернул не-200 — попробуем прочитать как JSON ошибку
       const errData = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
       throw new Error(errData.detail || `HTTP ${res.status}`);
     }
 
-    // Показываем блок результата сразу
     resultDiv.style.display = 'block';
     addCursor();
 
@@ -297,7 +379,7 @@ submitBtn.addEventListener('click', async () => {
 
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
-      buffer = lines.pop(); // неполная строка — обратно в буфер
+      buffer = lines.pop();
 
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
@@ -314,7 +396,7 @@ submitBtn.addEventListener('click', async () => {
         } else if (evt.type === 'done') {
           removeCursor();
           const elapsed = stopTimer();
-          setStatus('Готово ✓');
+          setStatus(t('status_done'));
           timeBadge.textContent = `⏱ ${elapsed}`;
         }
       }
@@ -334,8 +416,8 @@ submitBtn.addEventListener('click', async () => {
 $('copyBtn').addEventListener('click', () => {
   navigator.clipboard.writeText(resultText.innerText);
   const btn = $('copyBtn');
-  btn.textContent = 'Скопировано!';
-  setTimeout(() => btn.textContent = 'Копировать', 1500);
+  btn.textContent = t('copy_done');
+  setTimeout(() => btn.textContent = t('copy_btn'), 1500);
 });
 
 function fmt(sec) {
@@ -343,6 +425,9 @@ function fmt(sec) {
   const s = Math.floor(sec % 60).toString().padStart(2, '0');
   return `${m}:${s}`;
 }
+
+// ── Init ──
+applyTranslations();
 </script>
 </body>
 </html>

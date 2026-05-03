@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" id="html-root">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ytdl — скачать видео</title>
+<title>ytdl — video downloader</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -175,30 +175,49 @@
     display: none;
   }
   .info-preview strong { color: var(--text); display: block; margin-bottom: 2px; font-size: 12px; }
+  /* ── Lang switcher ── */
+  .lang-switcher {
+    position: fixed; top: 16px; right: 16px;
+    display: flex; gap: 4px; z-index: 100;
+  }
+  .lang-btn {
+    font-family: var(--mono); font-size: 11px;
+    padding: 4px 10px; border-radius: 4px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg);
+    color: var(--muted); transition: all 0.15s; letter-spacing: 0.06em;
+  }
+  .lang-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .lang-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(74,222,128,0.08); }
 </style>
 </head>
 <body>
+<div class="lang-switcher">
+  <button class="lang-btn active" data-lang="ru">RU</button>
+  <button class="lang-btn" data-lang="en">EN</button>
+</div>
+
 <header>
   <div class="logo">yt-dlp // video downloader</div>
-  <h1>Скачать <span>видео</span></h1>
-  <div class="subtitle">youtube · tiktok · и ещё 1000+ сайтов</div>
+  <h1 data-i18n="heading_prefix">Скачать <span data-i18n="heading_accent">видео</span></h1>
+  <div class="subtitle" data-i18n="subtitle">youtube · tiktok · и ещё 1000+ сайтов</div>
 </header>
 
 <div class="card">
   <div class="url-wrap">
     <input type="url" id="urlInput" class="url-input"
       placeholder="https://youtube.com/watch?v=...  или  https://tiktok.com/..."
+      data-i18n-placeholder="url_placeholder"
       autocomplete="off" spellcheck="false">
   </div>
   <div class="platform-hint">
     <span class="ph ph-yt">YouTube</span>
     <span class="ph ph-tt">TikTok</span>
-    <span class="ph ph-etc">Instagram · Twitter · Vimeo · и др.</span>
+    <span class="ph ph-etc" data-i18n="platforms_etc">Instagram · Twitter · Vimeo · и др.</span>
   </div>
 
   <!-- ── Codec / Quality selector ── -->
   <div class="codec-section">
-    <span class="codec-section-label">Качество и кодек</span>
+    <span class="codec-section-label" data-i18n="quality_label">Качество и кодек</span>
     <div class="codec-groups">
 
       <div class="codec-group">
@@ -224,12 +243,12 @@
       <div class="codec-group">
         <span class="codec-group-label">AV1</span>
         <div class="codec-btns">
-          <button class="fmt-btn" data-fmt="av1" data-codec="av1">Лучшее (до 8K)</button>
+          <button class="fmt-btn" data-fmt="av1" data-codec="av1" data-i18n="av1_label">Лучшее (до 8K)</button>
         </div>
       </div>
 
       <div class="codec-group">
-        <span class="codec-group-label">Аудио</span>
+        <span class="codec-group-label" data-i18n="audio_group">Аудио</span>
         <div class="codec-btns">
           <button class="fmt-btn" data-fmt="audio" data-codec="audio">MP3 192k</button>
         </div>
@@ -246,7 +265,7 @@
     </div>
   </div>
 
-  <button id="submitBtn" disabled>Скачать</button>
+  <button id="submitBtn" disabled data-i18n="submit_btn">Скачать</button>
 
   <div class="info-preview" id="infoPreview">
     <strong id="infoTitle"></strong>
@@ -272,14 +291,134 @@
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M7 1v8M7 9l-3-3M7 9l3-3M1 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        Скачать файл
+        <span data-i18n="download_file_btn">Скачать файл</span>
       </a>
-      <div class="expiry-row">файл будет удалён через <span id="expiryTimer">—</span></div>
+      <div class="expiry-row"><span data-i18n="expiry_label">файл будет удалён через</span> <span id="expiryTimer">—</span></div>
     </div>
   </div>
 </div>
 
 <script>
+// ── i18n ──
+const TRANSLATIONS = {
+  ru: {
+    heading_prefix:    'Скачать',
+    heading_accent:    'видео',
+    subtitle:          'youtube · tiktok · и ещё 1000+ сайтов',
+    url_placeholder:   'https://youtube.com/watch?v=...  или  https://tiktok.com/...',
+    platforms_etc:     'Instagram · Twitter · Vimeo · и др.',
+    quality_label:     'Качество и кодек',
+    av1_label:         'Лучшее (до 8K)',
+    audio_group:       'Аудио',
+    submit_btn:        'Скачать',
+    download_file_btn: 'Скачать файл',
+    expiry_label:      'файл будет удалён через',
+    expiry_expired:    'истёк',
+    status_connecting: 'Подключаюсь…',
+    status_download:   'Скачиваю…',
+    status_done:       'Готово ✓',
+    status_processing: 'Обрабатываю…',
+    dur_min:           'м',
+    dur_sec:           'с',
+    hint_h264: '<b>H.264 — рекомендуется для Windows.</b> Воспроизводится в стандартном проигрывателе Windows без каких-либо кодеков. YouTube отдаёт H.264 максимум до 1080p.',
+    hint_vp9:  '<b>VP9 — до 4K.</b> Бесплатно воспроизводится в VLC и браузере. Стандартный проигрыватель Windows может попросить кодек VP9 из Microsoft Store (бесплатно).',
+    hint_av1:  '<b>AV1 — максимальное качество, лучшее сжатие.</b> Требует VLC или Windows 11 + бесплатное расширение «AV1 Video Extension» из Microsoft Store. Стандартный плеер Win 10 не воспроизведёт.',
+    hint_audio:'<b>Только аудио MP3 192 kbps.</b> Воспроизводится везде без каких-либо кодеков.',
+    badge_elapsed: 'с',
+  },
+  en: {
+    heading_prefix:    'Download',
+    heading_accent:    'video',
+    subtitle:          'youtube · tiktok · and 1000+ more sites',
+    url_placeholder:   'https://youtube.com/watch?v=...  or  https://tiktok.com/...',
+    platforms_etc:     'Instagram · Twitter · Vimeo · and more',
+    quality_label:     'Quality & codec',
+    av1_label:         'Best (up to 8K)',
+    audio_group:       'Audio',
+    submit_btn:        'Download',
+    download_file_btn: 'Download file',
+    expiry_label:      'file will be deleted in',
+    expiry_expired:    'expired',
+    status_connecting: 'Connecting…',
+    status_download:   'Downloading…',
+    status_done:       'Done ✓',
+    status_processing: 'Processing…',
+    dur_min:           'm',
+    dur_sec:           's',
+    hint_h264: '<b>H.264 — recommended for Windows.</b> Plays in the default Windows Media Player with no extra codecs needed. YouTube serves H.264 up to 1080p.',
+    hint_vp9:  '<b>VP9 — up to 4K.</b> Plays for free in VLC and any browser. The default Windows player may need the free VP9 codec from the Microsoft Store.',
+    hint_av1:  '<b>AV1 — best quality, best compression.</b> Requires VLC or Windows 11 + the free "AV1 Video Extension" from the Microsoft Store. Windows 10 Media Player cannot play it.',
+    hint_audio:'<b>Audio only, MP3 192 kbps.</b> Plays everywhere with no extra codecs.',
+    badge_elapsed: 's',
+  },
+};
+
+let currentLang = localStorage.getItem('ytdl_lang') || 'ru';
+
+function t(key) {
+  return TRANSLATIONS[currentLang][key] || TRANSLATIONS.ru[key] || key;
+}
+
+function applyTranslations() {
+  document.getElementById('html-root').lang = currentLang;
+
+  // text nodes
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.dataset.i18n;
+    // h1 special case — contains a span child
+    if (el.tagName === 'H1') return;
+    el.textContent = t(key);
+  });
+
+  // h1 heading: rebuild inner HTML to keep the <span>
+  const h1 = document.querySelector('h1[data-i18n]');
+  if (h1) {
+    h1.innerHTML = `${t('heading_prefix')} <span>${t('heading_accent')}</span>`;
+  }
+
+  // placeholders
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+
+  // lang buttons
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === currentLang);
+  });
+
+  // codec hint (re-render current)
+  refreshHint();
+
+  // submit button
+  submitBtn.textContent = t('submit_btn');
+}
+
+function refreshHint() {
+  // find which codec is active
+  const activeBtn = document.querySelector('.fmt-btn.active, .fmt-btn.active-vp9, .fmt-btn.active-av1, .fmt-btn.active-audio');
+  if (!activeBtn) return;
+  const codec = activeBtn.dataset.codec;
+  const h = {
+    h264:  { cls: 'hint-h264',  icon: '✅', key: 'hint_h264'  },
+    vp9:   { cls: 'hint-vp9',   icon: '🎬', key: 'hint_vp9'   },
+    av1:   { cls: 'hint-av1',   icon: '⚡', key: 'hint_av1'   },
+    audio: { cls: 'hint-audio', icon: '🎵', key: 'hint_audio' },
+  }[codec];
+  if (!h) return;
+  codecHint.className = `codec-hint ${h.cls}`;
+  codecHint.querySelector('.hint-icon').textContent = h.icon;
+  codecHintText.innerHTML = t(h.key);
+}
+
+// ── Lang button clicks ──
+document.querySelectorAll('.lang-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentLang = btn.dataset.lang;
+    localStorage.setItem('ytdl_lang', currentLang);
+    applyTranslations();
+  });
+});
+
 const $ = id => document.getElementById(id);
 const urlInput    = $('urlInput');
 const submitBtn   = $('submitBtn');
@@ -306,36 +445,18 @@ let startTime      = null;
 
 // ── Codec hints ──
 const HINTS = {
-  h264: {
-    cls:  'hint-h264',
-    icon: '✅',
-    text: '<b>H.264 — рекомендуется для Windows.</b> Воспроизводится в стандартном проигрывателе Windows без каких-либо кодеков. YouTube отдаёт H.264 максимум до 1080p.',
-  },
-  vp9: {
-    cls:  'hint-vp9',
-    icon: '🎬',
-    text: '<b>VP9 — до 4K.</b> Бесплатно воспроизводится в VLC и браузере. Стандартный проигрыватель Windows может попросить кодек VP9 из Microsoft Store (бесплатно).',
-  },
-  av1: {
-    cls:  'hint-av1',
-    icon: '⚡',
-    text: '<b>AV1 — максимальное качество, лучшее сжатие.</b> Требует VLC или Windows 11 + бесплатное расширение «AV1 Video Extension» из Microsoft Store. Стандартный плеер Win 10 не воспроизведёт.',
-  },
-  audio: {
-    cls:  'hint-audio',
-    icon: '🎵',
-    text: '<b>Только аудио MP3 192 kbps.</b> Воспроизводится везде без каких-либо кодеков.',
-  },
+  h264:  { cls: 'hint-h264',  icon: '✅', key: 'hint_h264'  },
+  vp9:   { cls: 'hint-vp9',   icon: '🎬', key: 'hint_vp9'   },
+  av1:   { cls: 'hint-av1',   icon: '⚡', key: 'hint_av1'   },
+  audio: { cls: 'hint-audio', icon: '🎵', key: 'hint_audio' },
 };
 
 // ── Format buttons ──
 document.querySelectorAll('.fmt-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    // deactivate all
     document.querySelectorAll('.fmt-btn').forEach(b => {
       b.classList.remove('active', 'active-vp9', 'active-av1', 'active-audio');
     });
-    // activate clicked
     const codec = btn.dataset.codec;
     const cls = codec === 'h264' ? 'active'
               : codec === 'vp9'  ? 'active-vp9'
@@ -344,11 +465,10 @@ document.querySelectorAll('.fmt-btn').forEach(btn => {
     btn.classList.add(cls);
     selectedFmt = btn.dataset.fmt;
 
-    // update hint
     const h = HINTS[codec];
     codecHint.className = `codec-hint ${h.cls}`;
     codecHint.querySelector('.hint-icon').textContent = h.icon;
-    codecHintText.innerHTML = h.text;
+    codecHintText.innerHTML = t(h.key);
   });
 });
 
@@ -375,14 +495,14 @@ function startExpiry(seconds) {
   let rem = seconds;
   function fmt(s) {
     const m = Math.floor(s/60), sec = s%60;
-    return m > 0 ? `${m}м ${sec}с` : `${sec}с`;
+    return m > 0 ? `${m}${t('dur_min')} ${sec}${t('dur_sec')}` : `${sec}${t('dur_sec')}`;
   }
   expiryTimer.textContent = fmt(rem);
   expiryInterval = setInterval(() => {
     rem--;
     if (rem <= 0) {
       clearInterval(expiryInterval);
-      expiryTimer.textContent = 'истёк';
+      expiryTimer.textContent = t('expiry_expired');
       downloadBtn.style.opacity = '0.4';
       downloadBtn.style.pointerEvents = 'none';
       return;
@@ -410,7 +530,7 @@ submitBtn.addEventListener('click', async () => {
   submitBtn.disabled = true;
   resetUI();
   startTime = Date.now();
-  setStatus('Подключаюсь…', true);
+  setStatus(t('status_connecting'), true);
 
   const endpoint = `/download/stream?url=${encodeURIComponent(url)}&fmt=${selectedFmt}`;
 
@@ -456,7 +576,7 @@ function handleEvent(evt) {
       const upl = evt.uploader ? `· ${evt.uploader}` : '';
       infoMeta.textContent = [evt.platform, dur, upl].filter(Boolean).join(' ');
       infoPreview.style.display = 'block';
-      setStatus('Скачиваю…', true);
+      setStatus(t('status_download'), true);
       progressWrap.style.display = 'flex';
       break;
 
@@ -466,24 +586,24 @@ function handleEvent(evt) {
       const speed = evt.speed_mb > 0 ? `${evt.speed_mb} MB/s` : '—';
       const eta   = evt.eta > 0 ? `ETA ${fmtDuration(evt.eta)}` : '';
       progressRight.textContent = [speed, eta].filter(Boolean).join(' · ');
-      setStatus(`Скачиваю… ${evt.percent}%`, true);
+      setStatus(`${t('status_download')} ${evt.percent}%`, true);
       break;
 
     case 'processing':
       progressFill.style.width = '100%';
-      setStatus(evt.message || 'Обрабатываю…', true);
+      setStatus(t('status_processing'), true);
       break;
 
     case 'done': {
       progressFill.style.width = '100%';
       progressWrap.style.display = 'none';
       const elapsed = Math.round((Date.now() - startTime) / 1000);
-      setStatus('Готово ✓');
+      setStatus(t('status_done'));
 
       resultTitle.textContent = evt.title || evt.filename;
       resultMeta.innerHTML = `
         <span class="badge badge-size">${evt.size_mb} MB</span>
-        <span class="badge badge-time">⏱ ${elapsed}с</span>
+        <span class="badge badge-time">⏱ ${elapsed}${t('badge_elapsed')}</span>
         <span class="badge badge-expiry">TTL ${fmtDuration(evt.expires_in)}</span>
         <span class="badge badge-codec">${selectedFmt}</span>
       `;
@@ -510,8 +630,11 @@ function showError(msg) {
 function fmtDuration(sec) {
   if (!sec) return '';
   const m = Math.floor(sec / 60), s = sec % 60;
-  return m > 0 ? `${m}м ${s}с` : `${s}с`;
+  return m > 0 ? `${m}${t('dur_min')} ${s}${t('dur_sec')}` : `${s}${t('dur_sec')}`;
 }
+
+// ── Init ──
+applyTranslations();
 </script>
 </body>
 </html>

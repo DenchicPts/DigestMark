@@ -5,11 +5,12 @@ Turn any voice message, video or text into a structured Obsidian note — automa
 Send a YouTube link, a voice message or just type something to your Telegram bot. DigestMark transcribes it, classifies it with a local LLM, and saves a clean markdown note to your Obsidian vault. Or answers your question directly in Telegram.
 
 Runs mostly locally. Transcription and classification happen entirely on your hardware.
-By default, note formatting and question answering use [OpenRouter](https://openrouter.ai) (cloud API) — 
-free models are available. If you want a fully local setup, replace the OpenRouter nodes in n8n 
+
+By default, note formatting and question answering use [OpenRouter](https://openrouter.ai) (cloud API) —
+free models are available. If you want a fully local setup, replace the OpenRouter nodes in n8n
 with your own local LLM endpoint (e.g. another llama.cpp instance or Ollama).
 
-## How it works
+## How It Works
 
 ```
 Telegram → transcribe → classify → note in Obsidian
@@ -17,60 +18,64 @@ Telegram → transcribe → classify → note in Obsidian
 ```
 
 - **Voice / audio / video** → Whisper transcribes → classified → saved as note
-- **YouTube / TikTok / Vimeo link** → yt-dlp downloads audio → Whisper → saved as note  
+- **YouTube / TikTok / Vimeo link** → yt-dlp downloads audio → Whisper → saved as note
 - **Text message** → classified → saved as note or answered directly
 
 ## Hardware Requirements
 
-Tested on **Lenovo ThinkCentre M720q** (i7-8700T, 8GB RAM) — runs comfortably with all services active.
+Tested on a **Lenovo ThinkCentre M720q** (i7-8700T, 8 GB RAM) — runs comfortably with all services active.
 
-Minimum recommended: 4-core CPU, 8GB RAM.
+Minimum recommended: 4-core CPU, 8 GB RAM.
 
 | Service | RAM usage |
 |---|---|
-| n8n | up to 1GB |
-| audio-transcribe (Whisper medium) | up to 2GB |
-| llama.cpp (phi-3-mini) | up to 3GB |
-| yt-downloader | up to 500MB |
-| **Total** | **~6.5GB** |
+| n8n | up to 1 GB |
+| audio-transcribe (Whisper medium) | up to 2 GB |
+| llama.cpp (phi-3-mini) | up to 3 GB |
+| yt-downloader | up to 500 MB |
+| **Total** | **~6.5 GB** |
 
-GPU не требуется — всё работает на CPU.
+No GPU required — everything runs on CPU.
 
 ## Services
 
 ### 🎙️ audio-transcribe
-Транскрибация аудио и видео файлов через [faster-whisper](https://github.com/SYSTRAN/faster-whisper).  
-По умолчанию используется модель **Whisper medium** — хороший баланс скорости и точности для русского и английского языков. Модель скачивается автоматически при первом запуске.  
-Доступна замена на `tiny` / `base` / `small` / `large-v3-turbo` через переменную `MODEL_SIZE`.  
+
+Audio and video transcription via [faster-whisper](https://github.com/SYSTRAN/faster-whisper).  
+Uses **Whisper medium** by default — a good balance of speed and accuracy for English and Russian. The model is downloaded automatically on first run.  
+Can be swapped for `tiny` / `base` / `small` / `large-v3-turbo` via the `MODEL_SIZE` environment variable.  
 → [README](audio-transcribe/README.md)
 
 ### 🧠 llama.cpp
-Локальная классификация текста через [llama.cpp server](https://github.com/ggml-org/llama.cpp).  
-Используется модель **phi-3-mini-q4** (Microsoft) — 3.8B параметров, работает полностью на CPU, занимает ~2GB RAM.  
-Определяет тип входящего текста (`note`, `question`, `task`, `plain`) и категорию (`tech`, `docker`, `linux`, `personal` и др.).  
+
+Local text classification via [llama.cpp server](https://github.com/ggml-org/llama.cpp).  
+Uses **phi-3-mini-q4** (Microsoft) — 3.8B parameters, runs entirely on CPU, uses ~2 GB RAM.  
+Determines the type of incoming text (`note`, `question`, `task`, `plain`) and its category (`tech`, `docker`, `linux`, `personal`, etc.).  
 → [README](llama.cpp/README.md)
 
 ### 📥 yt-downloader
-Скачивание аудио из видео по ссылке через [yt-dlp](https://github.com/yt-dlp/yt-dlp).  
-Поддерживает YouTube, TikTok, Vimeo. Включает [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) для обхода защиты YouTube.  
-Возвращает токен — по нему n8n забирает файл и передаёт в Whisper.  
+
+Audio extraction from video URLs via [yt-dlp](https://github.com/yt-dlp/yt-dlp).  
+Supports YouTube, TikTok, Vimeo. Includes [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) to bypass YouTube bot protection.  
+Returns a token — n8n uses it to fetch the file and pass it to Whisper.  
 → [README](yt-downloader/README.md)
 
 ### ⚙️ n8n
-Оркестратор всего pipeline. Связывает Telegram, все сервисы и Obsidian в единый поток.  
-Воркфлоу хранится в `workflows/Telegram AI Pipeline.json`.  
+
+The orchestrator for the entire pipeline. Connects Telegram, all services, and Obsidian into a single workflow.  
+The workflow is stored in `workflows/Telegram AI Pipeline.json`.  
 → [README](n8n/README.md)
 
 ## Quick Start
 
-### 1. Склонируй репозиторий
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/DigestMark
 cd DigestMark
 ```
 
-### 2. Скачай модель для llama.cpp
+### 2. Download the llama.cpp Model
 
 ```bash
 mkdir -p llama.cpp/models
@@ -78,51 +83,54 @@ wget https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/P
   -O llama.cpp/models/phi-3-mini-q4.gguf
 ```
 
-### 3. Настрой n8n
+### 3. Configure n8n
 
-Отредактируй `n8n/docker-compose.yml` — замени IP на свой:
+Edit `n8n/docker-compose.yml` and replace the IP with your own:
 
 ```yaml
 - N8N_HOST=YOUR_SERVER_IP
 - WEBHOOK_URL=http://YOUR_SERVER_IP:5678/
 ```
 
-### 4. Запусти все сервисы
+### 4. Start All Services
 
 ```bash
 docker compose up -d
 ```
 
-### 5. Настрой воркфлоу
+### 5. Set Up the Workflow
 
-Подробная инструкция → [n8n/README](n8n/README.md)
+Full instructions → [n8n/README](n8n/README.md)
 
 ## API
 
-Три сервиса можно использовать независимо от n8n pipeline — для своих проектов или интеграций.
+All three services can be used independently of the n8n pipeline — for your own projects or integrations.
 
-### Транскрибация аудио
+### Transcribe Audio
+
 ```bash
 curl -X POST http://YOUR_SERVER_IP:9000/transcribe \
   -F "file=@audio.mp3"
 ```
 
-### Скачивание аудио из видео
+### Download Audio from Video
+
 ```bash
-# Запросить скачивание
+# Request a download
 curl -X POST http://YOUR_SERVER_IP:9001/api/download \
   -H "Content-Type: application/json" \
   -d '{"url": "https://youtube.com/watch?v=...", "format": "audio"}'
 
-# Забрать файл по токену
+# Retrieve the file by token
 curl http://YOUR_SERVER_IP:9001/file/TOKEN -o audio.mp3
 ```
 
-### Классификация текста
+### Classify Text
+
 ```bash
 curl -X POST http://YOUR_SERVER_IP:9002/completion \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "твой текст здесь", "n_predict": 200, "temperature": 0}'
+  -d '{"prompt": "your text here", "n_predict": 200, "temperature": 0}'
 ```
 
 ## Credits
