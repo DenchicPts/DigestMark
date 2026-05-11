@@ -10,10 +10,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
-from faster_whisper import WhisperModel
+import whisperx
 
 # Принудительно возвращаем память от ctranslate2 обратно ОС после выгрузки модели
-# (известный баг ctranslate2 — glibc не отдаёт память без этого вызова)
 try:
     _libc = ctypes.CDLL("libc.so.6")
     def _malloc_trim():
@@ -21,14 +20,18 @@ try:
         log.info("MODEL  malloc_trim  done — memory returned to OS")
 except Exception:
     def _malloc_trim():
-        pass  # не Linux — просто пропускаем
+        pass
 
-app = FastAPI(title="Whisper Transcription Service")
+app = FastAPI(title="WhisperX Transcription Service")
 
-MODEL_SIZE  = os.getenv("MODEL_SIZE", "small")
+MODEL_SIZE  = os.getenv("MODEL_SIZE", "medium")
 DEVICE      = os.getenv("DEVICE", "cpu")
 LANGUAGE    = os.getenv("LANGUAGE", None)
-CPU_THREADS = int(os.getenv("CPU_THREADS", "0"))  # 0 = авто
+CPU_THREADS = int(os.getenv("CPU_THREADS", "0"))
+# На CPU int8 — единственный разумный тип: быстрее float32, без потери точности
+COMPUTE_TYPE = "int8"
+# Размер батча для WhisperX. На CPU > 1 не даёт выигрыша, оставляем 1
+BATCH_SIZE  = int(os.getenv("BATCH_SIZE", "1"))
 
 SUPPORTED_EXTENSIONS = {
     ".ogg", ".oga", ".opus",
@@ -41,28 +44,29 @@ SUPPORTED_EXTENSIONS = {
 HTML_PATH = Path(__file__).parent / "index.html"
 
 import logging
-import threading  # noqa: E402
+import threading
 
-# ─────────────────────────────────────────────
-#  Логгер
-# ─────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-7s  %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-log = logging.getLogger("whisper")
+log = logging.getLogger("whisperx")
 
-IDLE_TIMEOUT = int(os.getenv("IDLE_TIMEOUT", "300"))  # секунд до выгрузки (по умолчанию 5 минут)
+IDLE_TIMEOUT = int(os.getenv("IDLE_TIMEOUT", "300"))
 
-# Пул потоков для CPU-тяжёлых задач транскрибации
 _executor = ThreadPoolExecutor(max_workers=2)
 
 
 class ModelManager:
     """
-    Ленивая загрузка модели с автовыгрузкой после IDLE_TIMEOUT секунд простоя.
-    Потокобезопасен: Lock защищает загрузку/выгрузку от гонок при параллельных запросах.
+    Ленивая загрузка WhisperX с автовыгрузкой после IDLE_TIMEOUT секунд простоя.
+    Потокобезопасен.
+
+    WhisperX отличия от faster-whisper:
+    - VAD-препроцессинг: сначала находит речь, режет на сегменты, затем батчинг
+    - Word-level timestamps через форсированное выравнивание (wav2vec2)
+    - На CPU: compute_type=int8, batch_size=1 — оптимально
     """
 
     def __init__(self):
@@ -74,23 +78,22 @@ class ModelManager:
         self._total_requests = 0
 
     def _load(self):
-        """Загружает модель (вызывается внутри lock)."""
         t0 = time.time()
-        log.info("MODEL  loading  size=%s device=%s threads=%s",
-                 MODEL_SIZE, DEVICE, CPU_THREADS or "auto")
-        self._model = WhisperModel(
+        log.info("MODEL  loading  size=%s device=%s compute=%s threads=%s",
+                 MODEL_SIZE, DEVICE, COMPUTE_TYPE, CPU_THREADS or "auto")
+        self._model = whisperx.load_model(
             MODEL_SIZE,
             device=DEVICE,
-            compute_type="int8",
-            cpu_threads=CPU_THREADS,
-            num_workers=1,
+            compute_type=COMPUTE_TYPE,
+            threads=CPU_THREADS if CPU_THREADS > 0 else 0,
+            # asr_options — отключаем condition_on_prev_text: снижает галлюцинации
+            asr_options={"condition_on_previous_text": False},
         )
         self._loaded_at = time.time()
         log.info("MODEL  ready    size=%s load_time=%.1fs",
                  MODEL_SIZE, self._loaded_at - t0)
 
     def _schedule_unload(self):
-        """Перезапускает таймер выгрузки."""
         if self._unload_timer:
             self._unload_timer.cancel()
         self._unload_timer = threading.Timer(IDLE_TIMEOUT, self._unload)
@@ -101,7 +104,6 @@ class ModelManager:
         with self._lock:
             if self._model is None:
                 return
-            # Не выгружаем если кто-то использует прямо сейчас
             idle_for = time.time() - self._last_used
             if idle_for < IDLE_TIMEOUT:
                 self._schedule_unload()
@@ -111,16 +113,15 @@ class ModelManager:
                      idle_for, uptime, self._total_requests)
             del self._model
             self._model = None
-            gc.collect()          # освобождаем Python-объекты
-            _malloc_trim()        # возвращаем память ctranslate2 обратно ОС
+            gc.collect()
+            _malloc_trim()
             log.info("MODEL  unloaded  RAM freed")
 
-    def get(self) -> WhisperModel:
-        """Возвращает модель, загружая если нужно, и сбрасывает таймер простоя."""
+    def get(self):
         with self._lock:
             was_unloaded = self._model is None
             if was_unloaded:
-                self._total_requests = 0  # сбрасываем счётчик на новую сессию
+                self._total_requests = 0
                 self._load()
             self._total_requests += 1
             self._last_used = time.time()
@@ -149,20 +150,55 @@ def convert_to_wav(input_path: str) -> str:
     return output_path
 
 
-def transcribe_params(language, task):
-    """Общие параметры транскрибации"""
-    return dict(
+def run_whisperx(wav_path: str, language: str | None, task: str) -> dict:
+    """
+    Транскрибация через WhisperX.
+
+    Отличие от faster-whisper:
+    1. whisperx.load_audio() — загружает как float32 numpy array (16kHz mono)
+    2. model.transcribe() — VAD внутри, режет на сегменты, батчинг по ним
+    3. whisperx.load_align_model() + whisperx.align() — word-level timestamps
+
+    На CPU batch_size=1 оптимален: больше не ускоряет, только тратит RAM.
+    """
+    model = model_manager.get()
+
+    audio = whisperx.load_audio(wav_path)
+
+    # Шаг 1: транскрибация с VAD-батчингом
+    result = model.transcribe(
+        audio,
+        batch_size=BATCH_SIZE,
         language=language or None,
         task=task,
-        beam_size=int(os.getenv("BEAM_SIZE", "5")),  # 5 = максимум точности
-        vad_filter=True,
-        vad_parameters=dict(min_silence_duration_ms=500),
-        condition_on_previous_text=True,
     )
+
+    detected_lang = result.get("language", language or "unknown")
+
+    # Шаг 2: word-level alignment (если язык поддерживается)
+    try:
+        align_model, align_metadata = whisperx.load_align_model(
+            language_code=detected_lang,
+            device=DEVICE,
+        )
+        result = whisperx.align(
+            result["segments"],
+            align_model,
+            align_metadata,
+            audio,
+            DEVICE,
+            return_char_alignments=False,
+        )
+        del align_model
+        gc.collect()
+        log.info("ALIGN  done  lang=%s", detected_lang)
+    except Exception as e:
+        log.warning("ALIGN  skipped  reason=%s", str(e))
+
+    return result, detected_lang
 
 
 async def save_upload(file: UploadFile) -> tuple[str, str]:
-    """Сохранить загруженный файл, вернуть (tmp_path, ext)"""
     filename = file.filename or "upload"
     ext = os.path.splitext(filename)[-1].lower()
     if ext not in SUPPORTED_EXTENSIONS:
@@ -174,6 +210,21 @@ async def save_upload(file: UploadFile) -> tuple[str, str]:
     with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
         tmp.write(data)
     return tmp.name, ext
+
+
+def segments_to_output(segments: list, full_text_fallback: str = "") -> tuple[list, str]:
+    """Преобразует сегменты WhisperX в формат ответа."""
+    result_segments = []
+    full_text = ""
+    for seg in segments:
+        text = seg.get("text", "").strip()
+        result_segments.append({
+            "start": round(seg.get("start", 0), 2),
+            "end":   round(seg.get("end", 0), 2),
+            "text":  text,
+        })
+        full_text += " " + text
+    return result_segments, full_text.strip() or full_text_fallback
 
 
 # ─────────────────────────────────────────────
@@ -192,10 +243,13 @@ def index():
 @app.get("/health")
 def health():
     return {
-        "status":      "ok",
-        "model":       MODEL_SIZE,
-        "device":      DEVICE,
-        "cpu_threads": CPU_THREADS or "auto",
+        "status":       "ok",
+        "backend":      "whisperx",
+        "model":        MODEL_SIZE,
+        "device":       DEVICE,
+        "compute_type": COMPUTE_TYPE,
+        "batch_size":   BATCH_SIZE,
+        "cpu_threads":  CPU_THREADS or "auto",
         "model_loaded": model_manager.loaded,
         "idle_timeout": IDLE_TIMEOUT,
     }
@@ -235,28 +289,21 @@ async def transcribe(
                  file.filename, os.path.getsize(wav_path) / 1024 / 1024,
                  lang or "auto", task)
 
-        segments_iter, info = model_manager.get().transcribe(
-            wav_path,
-            **transcribe_params(lang, task)
+        loop = asyncio.get_event_loop()
+        wx_result, detected_lang = await loop.run_in_executor(
+            _executor, lambda: run_whisperx(wav_path, lang, task)
         )
 
-        result_segments = []
-        full_text = ""
-        for seg in segments_iter:
-            result_segments.append({
-                "start": round(seg.start, 2),
-                "end":   round(seg.end, 2),
-                "text":  seg.text.strip(),
-            })
-            full_text += " " + seg.text.strip()
+        segments = wx_result.get("segments", [])
+        result_segments, full_text = segments_to_output(segments)
 
         elapsed = round(time.time() - t0, 1)
         log.info("TRANSCRIBE  done   elapsed=%.1fs lang=%s segments=%d words=%d",
-                 elapsed, info.language, len(result_segments), len(full_text.split()))
+                 elapsed, detected_lang, len(result_segments), len(full_text.split()))
 
         return JSONResponse({
-            "text":      full_text.strip(),
-            "language":  info.language,
+            "text":      full_text,
+            "language":  detected_lang,
             "elapsed_s": elapsed,
             "segments":  result_segments,
         })
@@ -283,6 +330,9 @@ async def transcribe_stream(
     Стриминг результата через Server-Sent Events.
     Используется веб-интерфейсом — текст появляется по мере обработки.
 
+    WhisperX не даёт true-streaming (сначала VAD, потом всё сразу),
+    поэтому шлём сегменты пачкой после завершения транскрибации.
+
     События:
       data: {"type": "info",    "language": "ru"}
       data: {"type": "segment", "start": 0.0, "end": 2.5, "text": "..."}
@@ -290,7 +340,6 @@ async def transcribe_stream(
     """
     tmp_path, _ = await save_upload(file)
 
-    # Конвертация в отдельном потоке, чтобы не блокировать event loop
     try:
         wav_path = await asyncio.get_event_loop().run_in_executor(
             _executor, convert_to_wav, tmp_path
@@ -301,48 +350,39 @@ async def transcribe_stream(
         raise HTTPException(400, str(e))
 
     lang = language or LANGUAGE or None
-
-    # Очередь: транскрибация идёт в thread pool, результаты пишутся сюда
     queue: asyncio.Queue = asyncio.Queue()
     loop = asyncio.get_event_loop()
 
     def run_transcription():
-        """Выполняется в thread pool — CPU-тяжёлая работа не блокирует event loop."""
         t0 = time.time()
         try:
             log.info("STREAM  start  file=%s size=%.2fMB lang=%s task=%s",
                      file.filename, os.path.getsize(wav_path) / 1024 / 1024,
                      lang or "auto", task)
-            segments_iter, info = model_manager.get().transcribe(
-                wav_path,
-                **transcribe_params(lang, task)
-            )
+
+            wx_result, detected_lang = run_whisperx(wav_path, lang, task)
+
             loop.call_soon_threadsafe(
                 queue.put_nowait,
-                json.dumps({"type": "info", "language": info.language})
+                json.dumps({"type": "info", "language": detected_lang})
             )
-            full_text = ""
-            seg_count = 0
-            for seg in segments_iter:
-                text = seg.text.strip()
-                full_text += " " + text
-                seg_count += 1
-                payload = {
-                    "type":  "segment",
-                    "start": round(seg.start, 2),
-                    "end":   round(seg.end, 2),
-                    "text":  text,
-                }
+
+            segments = wx_result.get("segments", [])
+            result_segments, full_text = segments_to_output(segments)
+
+            for seg in result_segments:
                 loop.call_soon_threadsafe(
                     queue.put_nowait,
-                    json.dumps(payload, ensure_ascii=False)
+                    json.dumps({"type": "segment", **seg}, ensure_ascii=False)
                 )
+
             elapsed = round(time.time() - t0, 1)
             log.info("STREAM  done   elapsed=%.1fs lang=%s segments=%d words=%d",
-                     elapsed, info.language, seg_count, len(full_text.split()))
+                     elapsed, detected_lang, len(result_segments), len(full_text.split()))
+
             loop.call_soon_threadsafe(
                 queue.put_nowait,
-                json.dumps({"type": "done", "full_text": full_text.strip(),
+                json.dumps({"type": "done", "full_text": full_text,
                             "elapsed_s": elapsed}, ensure_ascii=False)
             )
         except Exception as e:
@@ -352,7 +392,7 @@ async def transcribe_stream(
                 json.dumps({"type": "error", "message": str(e)})
             )
         finally:
-            loop.call_soon_threadsafe(queue.put_nowait, None)  # сигнал конца потока
+            loop.call_soon_threadsafe(queue.put_nowait, None)
             for p in (tmp_path, wav_path):
                 try:
                     if os.path.exists(p):

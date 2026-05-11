@@ -1,72 +1,88 @@
-# audio-transcribe — Transcription Service
+# audio-transcribe — WhisperX Transcription Service
 
-A microservice for transcribing audio and video files via [faster-whisper](https://github.com/SYSTRAN/faster-whisper). Accepts an audio file, returns the transcribed text.
+Микросервис для транскрибации аудио и видео файлов через [WhisperX](https://github.com/m-bain/whisperX).
 
-## Requirements
+## Что изменилось по сравнению с faster-whisper
+
+| | faster-whisper | WhisperX |
+|---|---|---|
+| Backend | CTranslate2 | CTranslate2 (тот же) |
+| VAD | фильтр (post-hoc) | препроцессинг перед батчингом |
+| Батчинг | нет | по VAD-сегментам |
+| Таймкоды | сегмент-уровень | слово-уровень (wav2vec2) |
+| Галлюцинации | `condition_on_prev_text=True` | отключено по умолчанию |
+| CPU режим | `int8` | `int8`, `batch_size=1` |
+
+На CPU прирост скромнее чем на GPU, но длинные файлы с паузами обрабатываются заметно быстрее
+благодаря VAD — тишина пропускается ещё до транскрибации.
+
+## Требования
 
 - Docker + Docker Compose
-- RAM: up to 2 GB (depends on model size)
+- RAM: до 4 ГБ (зависит от модели)
+- GPU: не нужна, работает на CPU
 
-## Getting Started
+## Запуск
 
 ```bash
 docker compose up -d
 ```
 
-The service will be available at `http://localhost:9000`
+Сервис доступен на `http://localhost:9000`
 
-### Model
+### Модели и RAM
 
-By default the model is **downloaded automatically on first run** into `./whisper-models/`. The size depends on `MODEL_SIZE`.
-
-If you want to download the model in advance, specify the path directly instead of the size:
-
-```yaml
-environment:
-  - MODEL_SIZE=medium         # auto-download by size name
-  # OR
-  - MODEL_PATH=/models/my-custom-model  # path to a pre-downloaded model
-```
-
-## Configuration
-
-| Variable | Default | Description |
-|---|---|---|
-| `MODEL_SIZE` | `medium` | Model size: `tiny` / `base` / `small` / `medium` / `large-v3-turbo` |
-| `DEVICE` | `cpu` | `cpu` or `cuda` |
-| `LANGUAGE` | _(auto)_ | Transcription language, e.g. `ru` or `en` |
-| `BEAM_SIZE` | `5` | Accuracy: `1` = fastest, `5` = best |
-| `IDLE_TIMEOUT` | `300` | Seconds of idle time before the model is unloaded from RAM |
-| `CPU_THREADS` | `0` | CPU threads, `0` = auto |
-
-### Model Sizes and RAM Requirements
-
-| Model | RAM |
+| Модель | RAM |
 |---|---|
-| tiny | ~1 GB |
-| base | ~1 GB |
-| small | ~1.5 GB |
-| medium | ~2 GB |
-| large-v3-turbo | ~6 GB |
+| tiny | ~1 ГБ |
+| base | ~1 ГБ |
+| small | ~1.5 ГБ |
+| medium | ~2 ГБ |
+| large-v3-turbo | ~6 ГБ |
+
+Модели скачиваются автоматически в `./whisper-models/` при первом запросе.
+
+## Конфигурация
+
+| Переменная | По умолчанию | Описание |
+|---|---|---|
+| `MODEL_SIZE` | `medium` | Размер модели |
+| `DEVICE` | `cpu` | `cpu` или `cuda` |
+| `CPU_THREADS` | `0` | Потоки CPU, `0` = авто |
+| `BATCH_SIZE` | `1` | На CPU оставить 1 |
+| `LANGUAGE` | _(авто)_ | Язык, например `ru` или `en` |
+| `IDLE_TIMEOUT` | `300` | Секунд простоя до выгрузки модели |
 
 ## API
 
-### Transcribe a File
+### Транскрибация файла
 
 ```bash
 curl -X POST http://localhost:9000/transcribe \
   -F "file=@audio.mp3"
 ```
 
-Response:
+Ответ:
 ```json
 {
-  "text": "transcribed text..."
+  "text": "транскрибированный текст...",
+  "language": "ru",
+  "elapsed_s": 12.4,
+  "segments": [
+    {"start": 0.0, "end": 2.5, "text": "..."}
+  ]
 }
 ```
 
-### Health Check
+### Health check
 
 ```bash
 curl http://localhost:9000/health
+```
+
+### Стриминг (SSE)
+
+```bash
+curl -X POST http://localhost:9000/transcribe/stream \
+  -F "file=@audio.mp3"
 ```

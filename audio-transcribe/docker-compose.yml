@@ -6,18 +6,17 @@ services:
     ports:
       - "9000:9000"
     volumes:
-      - ./whisper-models:/models
+      - ./whisper-models:/root/.cache/huggingface   # WhisperX кэширует модели сюда
     environment:
       - MODEL_SIZE=medium        # tiny | base | small | medium | large-v3-turbo
-      - CPU_THREADS=0
       - DEVICE=cpu
-      - LANGUAGE=
+      - CPU_THREADS=0            # 0 = авто
+      - BATCH_SIZE=1             # на CPU > 1 не даёт выигрыша
+      - LANGUAGE=                # пусто = авто-определение
       - IDLE_TIMEOUT=300         # секунд простоя до выгрузки модели
-      - BEAM_SIZE=5              # 1=быстро/мало RAM, 2=баланс, 5=максимум точности
-      - MALLOC_ARENA_MAX=2       # ограничивает арены glibc → меньше фрагментации памяти
-      - MALLOC_MMAP_THRESHOLD_=131072  # 128KB — чаще отдаём память через mmap → ОС видит освобождение
+      - MALLOC_ARENA_MAX=2
+      - MALLOC_MMAP_THRESHOLD_=131072
     mem_limit: 4g
-    # Логи — последние 50 строк, максимум 10MB
     logging:
       driver: json-file
       options:
