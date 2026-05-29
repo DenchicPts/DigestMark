@@ -25,7 +25,7 @@ except Exception:
 
 app = FastAPI(title="Whisper Transcription Service")
 
-MODEL_SIZE  = os.getenv("MODEL_SIZE", "small")
+MODEL_SIZE  = os.getenv("MODEL_SIZE", "large-v3-turbo")
 DEVICE      = os.getenv("DEVICE", "cpu")
 LANGUAGE    = os.getenv("LANGUAGE", None)
 CPU_THREADS = int(os.getenv("CPU_THREADS", "0"))  # 0 = авто
@@ -84,6 +84,7 @@ class ModelManager:
             compute_type="int8",
             cpu_threads=CPU_THREADS,
             num_workers=1,
+            download_root="/models",
         )
         self._loaded_at = time.time()
         log.info("MODEL  ready    size=%s load_time=%.1fs",

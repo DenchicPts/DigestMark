@@ -12,10 +12,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 COPY index.html .
 
-ENV MODEL_SIZE=small
+ENV MODEL_SIZE=large-v3-turbo
 ENV DEVICE=cpu
 ENV LANGUAGE=
 ENV CPU_THREADS=0
+
+# Папка для моделей — сюда маппится volume из docker-compose
+RUN mkdir -p /models
 
 EXPOSE 9000
 
