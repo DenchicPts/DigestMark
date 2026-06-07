@@ -159,6 +159,20 @@ FORMAT_MAP = {
 
 
 # ────────────────────────────────────────────────
+#  POT-провайдер: общие аргументы экстрактора
+# ────────────────────────────────────────────────
+
+def _pot_extractor_args() -> dict:
+    """Возвращает extractor_args для POT-провайдера bgutil."""
+    pot_url = f"http://{os.getenv('POT_HOST', 'bgutil')}:{os.getenv('POT_PORT', '4416')}"
+    return {
+        "youtubepot-bgutilhttp": {
+            "base_url": [pot_url]
+        }
+    }
+
+
+# ────────────────────────────────────────────────
 #  Endpoint для получения доступных форматов видео
 # ────────────────────────────────────────────────
 @app.get("/api/formats")
@@ -168,7 +182,11 @@ def api_formats(url: str = Query(...)):
     Фронтенд вызывает это чтобы показать только кнопки которые сработают.
     """
     try:
-        with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:
+        with yt_dlp.YoutubeDL({
+            "quiet": True,
+            "no_warnings": True,
+            "extractor_args": _pot_extractor_args(),
+        }) as ydl:
             info = ydl.extract_info(url, download=False)
 
         formats = info.get("formats", [])
@@ -270,11 +288,7 @@ def _run_download(
         "buffersize":                    1024 * 16,          # буфер записи
         "check_formats":                 False,              # не перепроверять форматы
         # ── POT провайдер ──
-        "extractor_args": {
-            "youtubepot-bgutilhttp": {
-                "base_url": [f"http://{os.getenv('POT_HOST', 'bgutil')}:{os.getenv('POT_PORT', '4416')}"]
-            }
-        },
+        "extractor_args": _pot_extractor_args(),
     }
 
     if is_audio:
