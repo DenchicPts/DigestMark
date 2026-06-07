@@ -6,20 +6,13 @@ services:
     init: true
     ports:
       - "4416:4416"
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:4416/ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
 
   ytdl:
     build: .
     container_name: ytdl
     restart: unless-stopped
     depends_on:
-      bgutil:
-        condition: service_healthy
+      - bgutil
     ports:
       - "9001:9001"
     volumes:
