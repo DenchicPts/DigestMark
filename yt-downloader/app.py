@@ -162,13 +162,16 @@ FORMAT_MAP = {
 #  POT-провайдер: общие аргументы экстрактора
 # ────────────────────────────────────────────────
 
-def _pot_extractor_args() -> dict:
-    """Возвращает extractor_args для POT-провайдера bgutil."""
+def _base_ydl_opts() -> dict:
+    """Базовые опции yt-dlp: POT-провайдер bgutil + JS runtime."""
     pot_url = f"http://{os.getenv('POT_HOST', 'bgutil')}:{os.getenv('POT_PORT', '4416')}"
     return {
-        "youtubepot-bgutilhttp": {
-            "base_url": [pot_url]
-        }
+        "extractor_args": {
+            "youtubepot-bgutilhttp": {
+                "base_url": [pot_url]
+            }
+        },
+        "js_runtimes": {"node": {}},
     }
 
 
@@ -185,7 +188,7 @@ def api_formats(url: str = Query(...)):
         with yt_dlp.YoutubeDL({
             "quiet": True,
             "no_warnings": True,
-            "extractor_args": _pot_extractor_args(),
+            **_base_ydl_opts(),
         }) as ydl:
             info = ydl.extract_info(url, download=False)
 
@@ -287,8 +290,8 @@ def _run_download(
         "http_chunk_size":               10 * 1024 * 1024,  # чанк 10 MB
         "buffersize":                    1024 * 16,          # буфер записи
         "check_formats":                 False,              # не перепроверять форматы
-        # ── POT провайдер ──
-        "extractor_args": _pot_extractor_args(),
+        # ── POT провайдер + JS runtime ──
+        **_base_ydl_opts(),
     }
 
     if is_audio:
